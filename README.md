@@ -1,12 +1,58 @@
 # Graphflow
 
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.22-blue)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/wzhongyou/graphflow)](https://goreportcard.com/report/github.com/wzhongyou/graphflow)
+[![Go Reference](https://pkg.go.dev/badge/github.com/wzhongyou/graphflow.svg)](https://pkg.go.dev/github.com/wzhongyou/graphflow)
 
 **Graphflow** is a Go-native Agent development framework built on a type-safe graph execution engine.
 
+> Mental model: **Graph = Nodes + Edges + State machine**. Nodes process state, edges control flow, the engine runs a Pregel-style superstep loop. It's as simple as writing plain Go functions.
+
 > [中文文档](README_zh.md)
+
+---
+
+## Installation
+
+```bash
+go get github.com/wzhongyou/graphflow
+```
+
+Requires Go 1.21+. The core `graph/` engine has zero external dependencies.
+
+---
+
+## Run in 5 seconds
+
+```bash
+go run ./examples/agent_demo
+```
+
+No configuration needed — mock mode runs immediately:
+
+```
+[react-agent] question: What is 123 * 456?
+  [Thought] → Action: calculator  (12ms)
+  [Observation] calculator: 56088
+  [Thought] → Answer: The answer is 56088.
+
+[done] steps=3  duration=21ms
+```
+
+That's a ReAct Agent: LLM thinks → calls calculator → returns the result.
+
+---
+
+## When to use Graphflow
+
+| Use case | Fit | Notes |
+|----------|-----|-------|
+| AI Agents (tool calling, RAG, multi-step reasoning) | **Best fit** | ReAct / RAG built-in |
+| Business workflows (order processing, ETL) | Good fit | Pure graph engine, AI-agnostic |
+| Non-Python deployment environments | **Best fit** | Single Go binary, no Python runtime |
+| Production with resilience requirements | **Best fit** | Circuit breaker, retry, timeout, bulkhead built-in |
+| Heavy Python ecosystem (LangChain, etc.) | Not a fit | Consider LangGraph |
 
 ---
 
@@ -18,10 +64,9 @@ Most Agent frameworks are Python-first, bring heavy runtimes, and blur the line 
 |---|---|---|---|
 | Language | **Go** | Python | Go |
 | Core abstraction | **Graph engine** | StateGraph | Graph + Chain |
-| Config-driven | **YAML + code** | Code only | Code only |
+| No Python runtime | **Yes** | No | **Yes** |
 | Zero-dependency core | **Yes** | No | No |
-| Single binary deploy | **Yes** | No | No |
-| Built-in resilience | **Retry / CB / Bulkhead** | Limited | Limited |
+| Built-in resilience | **CB / Retry / Bulkhead / Rate limit** | Limited | Limited |
 
 ---
 
@@ -55,60 +100,79 @@ The `graph/` package is **AI-agnostic** — it works equally well for business p
 
 ## Quick Start
 
-### LLM Configuration
+### 1. Mock mode (zero config, run now)
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/wzhongyou/graphflow/agent"
+    "github.com/wzhongyou/graphflow/graph"
+)
+
+func main() {
+    ag := agent.NewReActAgent(agent.ReActAgentConfig{
+        Name:         "my-agent",
+        SystemPrompt: "You are a helpful assistant.",
+        Tools:        []agent.Tool{&agent.CalculatorTool{}},
+    })
+    g, err := ag.BuildGraph()
+    if err != nil {
+        panic(err)
+    }
+
+    engine := graph.NewEngine(g)
+    result, err := engine.Run(context.Background(), &agent.MessageState{
+        Messages: []agent.Message{{Role: agent.RoleUser, Content: "What is 100 + 200?"}},
+    })
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(result.FinalState.Messages[len(result.FinalState.Messages)-1].Content)
+}
+```
+
+Omit the `LLM` field and it uses a built-in mock model (calculator only) — no API key needed.
+
+### 2. Connect a real LLM
 
 Graphflow uses [llmgate](https://github.com/wzhongyou/llmgate) as the LLM gateway (19 providers).
 
 ```bash
 # Option 1: config file (recommended)
 cp config/llmgate.toml.example config/llmgate.toml   # edit your API keys
-go run ./examples/agent_demo
+go run ./examples/agent_demo -q "What is 100 + 200?"
 
 # Option 2: environment variables
 export DEEPSEEK_KEY="sk-xxx"
-go run ./examples/agent_demo -env -provider deepseek
-
-# Option 3: mock mode (no API key needed)
-go run ./examples/agent_demo
+go run ./examples/agent_demo -env -provider deepseek -q "What is 100 + 200?"
 ```
 
-### ReAct Agent
-
-Use `ReActAgent.BuildGraph()` for zero-boilerplate setup:
+Only 3 extra lines in code:
 
 ```go
-import (
-    "github.com/wzhongyou/graphflow/agent"
-    llmgate_adapter "github.com/wzhongyou/graphflow/agent/llmgate"
-    "github.com/wzhongyou/graphflow/graph"
-    "github.com/wzhongyou/llmgate/sdk"
-)
+import llmgate_adapter "github.com/wzhongyou/graphflow/agent/llmgate"
+import "github.com/wzhongyou/llmgate/sdk"
 
 gw, _ := sdk.NewFromFile("config/llmgate.toml")
 adapter := llmgate_adapter.New(gw, llmgate_adapter.Config{Provider: "deepseek"})
 
 ag := agent.NewReActAgent(agent.ReActAgentConfig{
-    Name:         "react-agent",
-    LLM:          adapter,
-    SystemPrompt: "You are a helpful assistant.",
-    Tools:        []agent.Tool{&agent.CalculatorTool{}},
+    LLM: adapter,  // pass in the LLM
+    // ...
 })
-g, _ := ag.BuildGraph()
-
-engine := graph.NewEngine(g)
-result, _ := engine.Run(ctx, &agent.MessageState{
-    Messages: []agent.Message{{Role: agent.RoleUser, Content: "What is 123 * 456?"}},
-}, graph.WithHook(myReactHook))
 ```
 
-Or build the graph by hand for full control:
+### 3. Build the graph by hand (full control)
 
 ```go
-llm      := agent.NewLLMNode(agent.LLMNodeConfig{Model: adapter, Tools: tools})
-toolNode := agent.NewToolNode(tools...)
+llmNode   := agent.NewLLMNode(agent.LLMNodeConfig{Model: adapter, Tools: tools})
+toolNode  := agent.NewToolNode(tools...)
 
 g := graph.NewGraph[*agent.MessageState]("react-agent")
-g.AddNode("llm", llm.Run)
+g.AddNode("llm", llmNode.Run)
 g.AddNode("tool", toolNode.Run)
 g.SetEntryPoint("llm")
 g.AddCondition("llm", graph.Condition[*agent.MessageState]{
@@ -120,10 +184,20 @@ g.SetMaxIterations("llm", 20)
 g.Compile()
 ```
 
-### Observing the ReAct loop with Hook
+---
+
+## Observing execution with Hooks
+
+Implement the `graph.Hook` interface to observe every step:
 
 ```go
 type reactHook struct{}
+
+func (h *reactHook) OnNodeStart(_ context.Context, node string, s *agent.MessageState) {
+    if node == "llm" {
+        fmt.Printf("[Start] LLM thinking...\n")
+    }
+}
 
 func (h *reactHook) OnNodeEnd(_ context.Context, node string, s *agent.MessageState, _ error, dur time.Duration) {
     last := s.Messages[len(s.Messages)-1]
@@ -142,39 +216,12 @@ func (h *reactHook) OnNodeEnd(_ context.Context, node string, s *agent.MessageSt
         }
     }
 }
-// ... other Hook methods
+
+// Usage
+engine.Run(ctx, state, graph.WithHook(&reactHook{}))
 ```
 
-Output:
-```
-[react-agent] question: What is 123 * 456?
-  [Thought] → Action: calculator  (12ms)
-  [Observation] calculator: 56088
-  [Thought] → Answer: The answer is 56088.
-
-[done] steps=3  duration=21ms
-```
-
-### Business Workflow (pure graph, no AI)
-
-```go
-g := graph.NewGraph[OrderState]("order-pipeline")
-g.AddNode("validate",  validateOrder)
-g.AddNode("charge",    chargePayment)
-g.AddNode("fulfill",   fulfillOrder)
-g.AddNode("notify",    sendNotification)
-g.SetEntryPoint("validate")
-g.AddEdge("validate", "charge")
-g.AddEdge("charge",   "fulfill")
-g.AddEdge("fulfill",  "notify")
-g.Compile()
-
-engine := graph.NewEngine(g)
-result, err := engine.Run(ctx, initialState,
-    graph.WithTimeout(30*time.Second),
-    graph.WithCheckpoint(checkpoint.NewFileManager("/tmp/cp")),
-)
-```
+Full Hook interface: `OnGraphStart` · `OnGraphEnd` · `OnNodeStart` · `OnNodeEnd` · `OnError`. Combine multiple hooks with `graph.ComposeHooks`.
 
 ---
 
@@ -196,6 +243,49 @@ g.AddNode("charge", node)
 ```
 
 Available middleware: `WithRecover` · `WithTimeout` · `WithRetry` · `WithCircuitBreaker` · `WithRateLimit` · `WithBulkhead` · `WithValidate` · `WithCache`
+
+---
+
+## More Agent Patterns
+
+### RAG Agent
+
+```go
+ag := agent.NewRAGAgent(agent.RAGAgentConfig{
+    Name:         "rag-agent",
+    LLM:          adapter,
+    Embedder:     embedder,
+    VectorStore:  vectorStore,
+    SystemPrompt: "Answer questions based on the provided documents.",
+})
+g, _ := ag.BuildGraph()
+```
+
+`Embedder` and `VectorStore` are any implementations of the `agent.Embedder` / `agent.VectorStore` interfaces — the framework does not bind to a specific vector database.
+
+### Business Workflow (pure graph, no AI)
+
+```go
+g := graph.NewGraph[OrderState]("order-pipeline")
+g.AddNode("validate",  validateOrder)
+g.AddNode("charge",    chargePayment)
+g.AddNode("fulfill",   fulfillOrder)
+g.AddNode("notify",    sendNotification)
+g.SetEntryPoint("validate")
+g.AddEdge("validate", "charge")
+g.AddEdge("charge",   "fulfill")
+g.AddEdge("fulfill",  "notify")
+g.Compile()
+
+engine := graph.NewEngine(g)
+result, err := engine.Run(ctx, initialState,
+    graph.WithTimeout(30*time.Second),
+    graph.WithCheckpoint(checkpoint.NewFileManager("/tmp/cp")),
+)
+if err != nil {
+    // distinguish error types with graph.IsRetryableError / graph.IsCircuitOpenError
+}
+```
 
 ---
 
