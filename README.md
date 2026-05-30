@@ -5,102 +5,115 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/wzhongyou/graphflow)](https://goreportcard.com/report/github.com/wzhongyou/graphflow)
 [![Go Reference](https://pkg.go.dev/badge/github.com/wzhongyou/graphflow.svg)](https://pkg.go.dev/github.com/wzhongyou/graphflow)
 
-**Graphflow** is a Go-native Agent development framework built on a type-safe graph execution engine.
+**Graphflow** 是一个以图执行引擎为核心的 Go 原生 Agent 开发框架。
 
-> Mental model: **Graph = Nodes + Edges + State machine**. Nodes process state, edges control flow, the engine runs a Pregel-style superstep loop. It's as simple as writing plain Go functions.
-
-> [中文文档](README_zh.md)
+> 心智模型：**图 = 节点 + 边 + 状态机**。节点处理状态，边控制流转，引擎按 Pregel 超级步循环执行。跟写普通 Go 函数一样简单。
 
 ---
 
-## Installation
+## 安装
 
 ```bash
 go get github.com/wzhongyou/graphflow
 ```
 
-Requires Go 1.21+. The core `graph/` engine has zero external dependencies.
+需要 Go 1.21+。核心引擎 `graph/` 零外部依赖。
 
 ---
 
-## Run in 5 seconds
+## 5 秒跑起来
 
 ```bash
 go run ./examples/agent_demo
 ```
 
-No configuration needed — mock mode runs immediately:
+无需任何配置，Mock 模式直接运行：
 
 ```
-[react-agent] question: What is 123 * 456?
-  [Thought] → Action: calculator  (12ms)
-  [Observation] calculator: 56088
-  [Thought] → Answer: The answer is 56088.
+[react-agent] 问题: What is 123 * 456?
+  [思考] → 调用工具: calculator  (12ms)
+  [观察] calculator: 56088
+  [思考] → 最终回答: 答案是 56088。
 
 [done] steps=3  duration=21ms
 ```
 
-That's a ReAct Agent: LLM thinks → calls calculator → returns the result.
+这就是一个 ReAct Agent：LLM 思考 → 调用计算器 → 返回结果。
 
 ---
 
-## When to use Graphflow
+## 什么时候用 Graphflow
 
-| Use case | Fit | Notes |
-|----------|-----|-------|
-| AI Agents (tool calling, RAG, multi-step reasoning) | **Best fit** | ReAct / RAG built-in |
-| Business workflows (order processing, ETL) | Good fit | Pure graph engine, AI-agnostic |
-| Non-Python deployment environments | **Best fit** | Single Go binary, no Python runtime |
-| Production with resilience requirements | **Best fit** | Circuit breaker, retry, timeout, bulkhead built-in |
-| Heavy Python ecosystem (LangChain, etc.) | Not a fit | Consider LangGraph |
+| 场景 | 适合吗 | 说明 |
+|------|--------|------|
+| 构建 AI Agent（工具调用、RAG、多步推理） | **最适合** | ReAct / RAG 开箱即用 |
+| 业务工作流编排（订单处理、ETL） | 适合 | 纯图引擎，跟 AI 无关 |
+| 需要非 Python 部署环境 | **最适合** | 单 Go 二进制，无 Python 运行时 |
+| 需要弹性保障的生产环境 | **最适合** | 内置熔断、重试、超时、舱壁 |
+| Python 生态重度依赖（LangChain 等） | 不适合 | 考虑 LangGraph |
 
 ---
 
-## Why Graphflow
+## 为什么选择 Graphflow
 
-Most Agent frameworks are Python-first, bring heavy runtimes, and blur the line between orchestration and AI logic. Graphflow is different:
+大多数 Agent 框架以 Python 为主，引入了沉重的运行时，且将编排逻辑与 AI 逻辑混在一起。Graphflow 的思路不同：
 
 | | Graphflow | LangGraph | Eino |
 |---|---|---|---|
-| Language | **Go** | Python | Go |
-| Core abstraction | **Graph engine** | StateGraph | Graph + Chain |
-| No Python runtime | **Yes** | No | **Yes** |
-| Zero-dependency core | **Yes** | No | No |
-| Built-in resilience | **CB / Retry / Bulkhead / Rate limit** | Limited | Limited |
+| 语言 | **Go** | Python | Go |
+| 核心抽象 | **图引擎** | StateGraph | Graph + Chain |
+| 无 Python 运行时 | **是** | 否 | **是** |
+| 核心零外部依赖 | **是** | 否 | 否 |
+| 内置弹性能力 | **熔断 / 重试 / 舱壁 / 限流** | 有限 | 有限 |
+
+### 功能对比
+
+| 功能 | Graphflow ✅ | Graft | Eino | LangChainGo |
+|------|-------------|-------|------|-------------|
+| 流式响应 | ✅ 完成 | ✅ | ✅ | ✅ |
+| 结构化输出 | ✅ 完成 | ✅ | ✅ | ✅ |
+| 多 Agent 编排 | ✅ 完成 | ✅ | ✅ | ❌ |
+| MCP 协议 | ✅ 完成 | ✅ | ❌ | ✅ |
+| OTel 追踪 | ✅ 完成 | ✅ | ✅ | ❌ |
+| Checkpoint 持久化 | ✅ 4种后端 | 2种 | ❌ | ✅ |
+| 弹性中间件 | ✅ 8种 | 有限 | 有限 | ❌ |
+| 19个LLM供应商 | ✅ | 多供应商 | 有限 | 多供应商 |
+| 核心零依赖 | ✅ | ❌（依赖 OTel） | ❌ | ❌（50+依赖） |
+| 流式图执行事件 | ✅ RunStream | ❌ | ❌ | ❌ |
 
 ---
 
-## Architecture
+## 架构
 
 ```
 ┌──────────────────────────────────────────┐
-│  Your Application                        │
-│  Business workflows · AI Agent apps      │
+│  你的应用                                 │
+│  业务流程编排 · AI Agent 应用              │
 └─────────────────────┬────────────────────┘
                       │
 ┌─────────────────────▼────────────────────┐
-│  agent/   — Agent Development Layer      │
+│  agent/   — Agent 开发层                  │
 │  MessageState · LLMNode · ToolNode       │
-│  ReAct · RAG · Supervisor patterns       │
-│  ToolRegistry · Memory management        │
+│  ReAct · RAG · Supervisor 模式           │
+│  ToolRegistry · 内存管理                  │
 └─────────────────────┬────────────────────┘
-                      │ depends on
+                      │ 依赖
 ┌─────────────────────▼────────────────────┐
-│  graph/   — Graph Execution Engine       │
+│  graph/   — 图执行引擎                    │
 │  Graph[S] · Engine[S] · NodeFunc[S]      │
-│  Sequential · Conditional · Parallel     │
-│  Loop · Checkpoint · Hook · OTel         │
+│  顺序 · 条件路由 · 并行 · 循环             │
+│  Checkpoint · Hook · OTel               │
 │  middleware/ · node/ · checkpoint/       │
 └──────────────────────────────────────────┘
 ```
 
-The `graph/` package is **AI-agnostic** — it works equally well for business process orchestration, ETL pipelines, and event-driven workflows. The `agent/` package adds the AI-specific layer on top.
+`graph/` 包**与 AI 完全无关**——同样适用于业务流程编排、ETL 管道、事件驱动架构。`agent/` 包在其上提供 AI 专属的抽象层。
 
 ---
 
-## Quick Start
+## 快速开始
 
-### 1. Mock mode (zero config, run now)
+### 1. Mock 模式（零配置，先跑起来）
 
 ```go
 package main
@@ -115,7 +128,7 @@ import (
 func main() {
     ag := agent.NewReActAgent(agent.ReActAgentConfig{
         Name:         "my-agent",
-        SystemPrompt: "You are a helpful assistant.",
+        SystemPrompt: "你是一个有用的助手。",
         Tools:        []agent.Tool{&agent.CalculatorTool{}},
     })
     g, err := ag.BuildGraph()
@@ -125,7 +138,7 @@ func main() {
 
     engine := graph.NewEngine(g)
     result, err := engine.Run(context.Background(), &agent.MessageState{
-        Messages: []agent.Message{{Role: agent.RoleUser, Content: "What is 100 + 200?"}},
+        Messages: []agent.Message{{Role: agent.RoleUser, Content: "100 + 200 是多少？"}},
     })
     if err != nil {
         panic(err)
@@ -134,23 +147,23 @@ func main() {
 }
 ```
 
-Omit the `LLM` field and it uses a built-in mock model (calculator only) — no API key needed.
+不传 `LLM` 字段，自动使用 Mock 模型（内置计算器），无需 API key。
 
-### 2. Connect a real LLM
+### 2. 接入真实 LLM
 
-Graphflow uses [llmgate](https://github.com/wzhongyou/llmgate) as the LLM gateway (19 providers).
+Graphflow 通过 [llmgate](https://github.com/wzhongyou/llmgate) 接入 LLM（支持 19 个供应商）。
 
 ```bash
-# Option 1: config file (recommended)
-cp config/llmgate.toml.example config/llmgate.toml   # edit your API keys
-go run ./examples/agent_demo -q "What is 100 + 200?"
+# 方式一：配置文件（推荐）
+cp config/llmgate.toml.example config/llmgate.toml   # 填入 API key
+go run ./examples/agent_demo -q "100 + 200 是多少？"
 
-# Option 2: environment variables
+# 方式二：环境变量
 export DEEPSEEK_KEY="sk-xxx"
-go run ./examples/agent_demo -env -provider deepseek -q "What is 100 + 200?"
+go run ./examples/agent_demo -env -provider deepseek -q "100 + 200 是多少？"
 ```
 
-Only 3 extra lines in code:
+代码只需加 3 行：
 
 ```go
 import llmgate_adapter "github.com/wzhongyou/graphflow/agent/llmgate"
@@ -160,12 +173,12 @@ gw, _ := sdk.NewFromFile("config/llmgate.toml")
 adapter := llmgate_adapter.New(gw, llmgate_adapter.Config{Provider: "deepseek"})
 
 ag := agent.NewReActAgent(agent.ReActAgentConfig{
-    LLM: adapter,  // pass in the LLM
+    LLM: adapter,  // 传入 LLM 即可
     // ...
 })
 ```
 
-### 3. Build the graph by hand (full control)
+### 3. 手动搭图（更多控制）
 
 ```go
 llmNode   := agent.NewLLMNode(agent.LLMNodeConfig{Model: adapter, Tools: tools})
@@ -179,23 +192,23 @@ g.AddCondition("llm", graph.Condition[*agent.MessageState]{
     If:     agent.HasPendingToolCalls,
     Target: "tool",
 })
-g.AddEdge("tool", "llm")   // loop back
+g.AddEdge("tool", "llm")   // 回边，形成循环
 g.SetMaxIterations("llm", 20)
 g.Compile()
 ```
 
 ---
 
-## Observing execution with Hooks
+## 用 Hook 观测执行过程
 
-Implement the `graph.Hook` interface to observe every step:
+实现 `graph.Hook` 接口即可观测每一步的执行：
 
 ```go
 type reactHook struct{}
 
 func (h *reactHook) OnNodeStart(_ context.Context, node string, s *agent.MessageState) {
     if node == "llm" {
-        fmt.Printf("[Start] LLM thinking...\n")
+        fmt.Printf("[开始] LLM 思考中...\n")
     }
 }
 
@@ -204,33 +217,33 @@ func (h *reactHook) OnNodeEnd(_ context.Context, node string, s *agent.MessageSt
     switch node {
     case "llm":
         if len(last.ToolCalls) > 0 {
-            fmt.Printf("[Thought] → Action: %s  (%s)\n", last.ToolCalls[0].Name, dur)
+            fmt.Printf("[思考] → 调用工具: %s  (%s)\n", last.ToolCalls[0].Name, dur)
         } else {
-            fmt.Printf("[Thought] → Answer: %s\n", last.Content)
+            fmt.Printf("[思考] → 最终回答: %s\n", last.Content)
         }
     case "tool":
         for _, m := range s.Messages {
             if m.Role == agent.RoleTool {
-                fmt.Printf("[Observation] %s: %s\n", m.ToolName, m.Content)
+                fmt.Printf("[观察] %s: %s\n", m.ToolName, m.Content)
             }
         }
     }
 }
 
-// Usage
+// 使用
 engine.Run(ctx, state, graph.WithHook(&reactHook{}))
 ```
 
-Full Hook interface: `OnGraphStart` · `OnGraphEnd` · `OnNodeStart` · `OnNodeEnd` · `OnError`. Combine multiple hooks with `graph.ComposeHooks`.
+Hook 接口完整方法：`OnGraphStart` · `OnGraphEnd` · `OnNodeStart` · `OnNodeEnd` · `OnError`。多个 Hook 可用 `graph.ComposeHooks` 组合。
 
 ---
 
-## Resilience Middleware
+## 弹性中间件
 
-Node functions are plain `func(ctx, state) (state, error)` — wrap them with middleware:
+节点函数是普通的 `func(ctx, state) (state, error)`——直接用中间件包装：
 
 ```go
-// Recommended composition order (outer → inner)
+// 推荐组合顺序（由外到内）
 node := middleware.WithRecover("payment",           // panic → error
     middleware.WithTimeout(chargePayment, 5*time.Second,
         middleware.WithRetry(chargePayment, middleware.RetryPolicy{
@@ -242,11 +255,11 @@ node := middleware.WithRecover("payment",           // panic → error
 g.AddNode("charge", node)
 ```
 
-Available middleware: `WithRecover` · `WithTimeout` · `WithRetry` · `WithCircuitBreaker` · `WithRateLimit` · `WithBulkhead` · `WithValidate` · `WithCache`
+可用中间件：`WithRecover` · `WithTimeout` · `WithRetry` · `WithCircuitBreaker` · `WithRateLimit` · `WithBulkhead` · `WithValidate` · `WithCache`
 
 ---
 
-## More Agent Patterns
+## 更多 Agent 模式
 
 ### RAG Agent
 
@@ -256,14 +269,14 @@ ag := agent.NewRAGAgent(agent.RAGAgentConfig{
     LLM:          adapter,
     Embedder:     embedder,
     VectorStore:  vectorStore,
-    SystemPrompt: "Answer questions based on the provided documents.",
+    SystemPrompt: "基于提供的文档回答问题。",
 })
 g, _ := ag.BuildGraph()
 ```
 
-`Embedder` and `VectorStore` are any implementations of the `agent.Embedder` / `agent.VectorStore` interfaces — the framework does not bind to a specific vector database.
+`Embedder` 和 `VectorStore` 是实现 `agent.Embedder` / `agent.VectorStore` 接口的任意实现，框架不绑定具体向量数据库。
 
-### Business Workflow (pure graph, no AI)
+### 业务工作流（纯图，无 AI）
 
 ```go
 g := graph.NewGraph[OrderState]("order-pipeline")
@@ -283,89 +296,96 @@ result, err := engine.Run(ctx, initialState,
     graph.WithCheckpoint(checkpoint.NewFileManager("/tmp/cp")),
 )
 if err != nil {
-    // distinguish error types with graph.IsRetryableError / graph.IsCircuitOpenError
+    // 可通过 graph.IsRetryableError / graph.IsCircuitOpenError 区分错误类型
 }
 ```
 
 ---
 
-## Package Layout
+## 包结构
 
 ```
 graphflow/
-├── graph/                  # Core graph engine (import "…/graph")
-│   ├── graph.go            # Graph[S], NodeFunc, Condition, MergeFunc
-│   ├── engine.go           # Engine[S].Run — Pregel superstep loop
-│   ├── hooks.go            # Hook[S] interface, ComposeHooks
-│   ├── errors.go           # Structured error types
-│   ├── middleware/         # NodeFunc decorators
+├── graph/                  # 核心图引擎（import "…/graph"）
+│   ├── graph.go            # Graph[S]、NodeFunc、Condition、MergeFunc
+│   ├── engine.go           # Engine[S].Run — Pregel 超级步执行循环
+│   ├── hooks.go            # Hook[S] 接口、ComposeHooks
+│   ├── errors.go           # 结构化错误类型
+│   ├── middleware/         # NodeFunc 装饰器
 │   │   ├── retry.go
 │   │   ├── circuitbreaker.go
 │   │   ├── bulkhead.go
 │   │   └── ...
-│   ├── node/               # Built-in nodes (HTTP, Delay, Transform, Noop)
-│   └── checkpoint/         # Persistence (memory · file · redis · sqlite)
+│   ├── node/               # 内置节点（HTTP、Delay、Transform、Noop）
+│   └── checkpoint/         # 持久化（内存 · 文件 · Redis · SQLite）
 │
-├── agent/                  # Agent layer (import "…/agent")
-│   ├── state.go            # MessageState, Message, ToolCall
-│   ├── llm.go              # LLMModel, Embedder, VectorStore interfaces
-│   ├── nodes.go            # LLMNode, ToolNode, VectorRetrieveNode, HumanInputNode
-│   ├── tools.go            # Tool interface, ToolRegistry, CalculatorTool
-│   ├── agents.go           # ReActAgent, RAGAgent, SupervisorAgent
-│   ├── memory.go           # ShortTermMemory, LongTermMemory
-│   └── llmgate/            # llmgate adapter (LLMModel impl)
+├── agent/                  # Agent 层（import "…/agent"）
+│   ├── state.go            # MessageState、Message、ToolCall
+│   ├── llm.go              # LLMModel、Embedder、VectorStore 接口
+│   ├── nodes.go            # LLMNode、ToolNode、VectorRetrieveNode、HumanInputNode
+│   ├── tools.go            # Tool 接口、ToolRegistry、CalculatorTool
+│   ├── agents.go           # ReActAgent、RAGAgent、SupervisorAgent
+│   ├── memory.go           # ShortTermMemory、LongTermMemory
+│   └── llmgate/            # llmgate 适配器（实现 LLMModel 接口）
 │
-├── config/                 # Configuration templates
+├── config/                 # 配置模板
 │   └── llmgate.toml.example
 │
-└── examples/
-    └── agent_demo/         # ReAct agent with Hook tracing (mock + real LLM)
+├── examples/
+│   ├── agent_demo/         # ReAct Agent 基础示例（mock + 真实 LLM）
+│   ├── streaming/          # 流式响应 — OnChunk + RunStream
+│   ├── supervisor/         # 多智能体编排 — Supervisor 路由
+│   ├── structured_output/  # 结构化输出 — JSON Schema 约束与校验
+│   ├── workflow/           # 业务工作流 — 纯图引擎（无 AI）
+│   └── mcp/                # MCP 协议客户端连接与工具发现
 ```
 
 ---
 
-## Roadmap
+## 路线图
 
-### Core (graph/)
-- [x] Graph model — sequential, conditional routing
-- [x] Loop / back-edge detection with iteration limits
-- [x] Hook interface + ComposeHooks
-- [x] Resilience middleware suite
-- [x] Built-in nodes (HTTP, Delay, Transform, Noop)
-- [x] Structured error types
-- [x] Parallel fan-out / fan-in
+### 核心层（graph/）
+- [x] 图模型——顺序执行、条件路由
+- [x] 循环 / 回边检测与迭代限制
+- [x] Hook 接口 + ComposeHooks
+- [x] 弹性中间件套件
+- [x] 内置节点（HTTP、Delay、Transform、Noop）
+- [x] 结构化错误类型
+- [x] 并行扇出 / 扇入
 - [x] Stream[T] — Send / Chan / Merge / Broadcast
-- [x] Checkpoint — InMemory, File
-- [ ] OTelHook
-- [ ] YAML config + LoadFromFile
+- [x] Checkpoint——内存、文件
+- [x] RunStream — 流式执行事件（通过 Hook 机制）
+- [x] OTelHook — OpenTelemetry 追踪（graph/hooks/ 子包）
+- [ ] YAML 配置 + LoadFromFile
 
-### Agent (agent/)
-- [x] MessageState, Message, ToolCall types (A1)
-- [x] LLMModel / Embedder / VectorStore interfaces (A2)
-- [x] LLMNode, ToolNode — real implementation with tool calling (A3)
-- [x] VectorRetrieveNode, HumanInputNode (A3)
-- [x] Tool interface + ToolRegistry + CalculatorTool (A4)
-- [x] ShortTermMemory, LongTermMemory (A5)
-- [x] ReActAgent.BuildGraph (A6)
-- [x] RAGAgent.BuildGraph (A7)
-- [x] llmgate adapter — 19 providers, fallback, strategy routing
-- [ ] SupervisorAgent.BuildGraph (A8)
-- [ ] Stream agent + SSE (A9)
-- [ ] Structured Output (A10)
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push and open a Pull Request
-
-Please ensure: `go vet ./...` passes, new public APIs have doc comments, non-trivial logic has unit tests.
+### Agent 层（agent/）
+- [x] MessageState、Message、ToolCall 类型（A1）
+- [x] LLMModel / Embedder / VectorStore 接口（A2）
+- [x] LLMNode、ToolNode 真实实现，支持 tool calling（A3）
+- [x] VectorRetrieveNode、HumanInputNode（A3）
+- [x] Tool 接口 + ToolRegistry + CalculatorTool（A4）
+- [x] ShortTermMemory、LongTermMemory（A5）
+- [x] ReActAgent.BuildGraph（A6）
+- [x] RAGAgent.BuildGraph（A7）
+- [x] llmgate 适配器 — 19 个供应商、降级、策略路由
+- [x] SupervisorAgent.BuildGraph — 多智能体编排（A8）
+- [x] 流式响应 — LLMNode.OnChunk 回调 + Engine.RunStream（A9）
+- [x] 结构化输出 — JSON Schema 约束与校验（A10）
+- [x] MCP 协议支持 — 通过 MCP 服务器发现和调用工具
 
 ---
 
-## License
+## 贡献指南
+
+1. Fork 本仓库
+2. 创建特性分支（`git checkout -b feature/amazing-feature`）
+3. 提交更改（`git commit -m 'Add amazing feature'`）
+4. 推送并发起 Pull Request
+
+请确保：`go vet ./...` 通过，新公开 API 有文档注释，非简单逻辑有单元测试。
+
+---
+
+## 许可证
 
 [MIT](LICENSE) © 2026 Wang Zhongyou

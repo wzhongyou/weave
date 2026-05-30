@@ -199,8 +199,20 @@ func (m *mockLLM) Chat(_ context.Context, req *agent.ChatRequest) (*agent.ChatRe
 	}, nil
 }
 
-func (m *mockLLM) ChatStream(_ context.Context, _ *agent.ChatRequest) (<-chan *agent.StreamChunk, error) {
-	return nil, fmt.Errorf("streaming not implemented in mock")
+func (m *mockLLM) ChatStream(_ context.Context, req *agent.ChatRequest) (<-chan *agent.StreamChunk, error) {
+	resp, err := m.Chat(context.Background(), req)
+	if err != nil {
+		return nil, err
+	}
+	ch := make(chan *agent.StreamChunk, 1)
+	ch <- &agent.StreamChunk{
+		Content:      resp.Content,
+		ToolCalls:    resp.ToolCalls,
+		FinishReason: resp.FinishReason,
+		Usage:        resp.Usage,
+	}
+	close(ch)
+	return ch, nil
 }
 
 func init() {

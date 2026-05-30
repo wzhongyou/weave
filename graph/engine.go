@@ -117,6 +117,52 @@ func (e *Engine[S]) Run(ctx context.Context, initialState S, opts ...Option) (*E
 	return finish(TerminationCompleted, nil)
 }
 
+// RunStream executes the graph and streams events through a Stream.
+func (e *Engine[S]) RunStream(ctx context.Context, initialState S, opts ...Option) (*Stream[*StreamEvent[S]], error) {
+	stream := NewStream[*StreamEvent[S]](16)
+
+	// Create a hook that writes events to the stream
+	streamHook := &streamHook[S]{stream: stream, graphName: e.graph.name}
+
+	// Add the stream hook to existing hooks via composeHook
+	opts = append(opts, func(cfg *runConfig) {
+		existing := hookOf[S](cfg.hook)
+		if existing != nil {
+			cfg.hook = ComposeHooks(existing, streamHook)
+		} else {
+			cfg.hook = streamHook
+		}
+	})
+
+	// Run in a goroutine
+	go func() {
+		// Emit GraphStart
+		stream.Send(&StreamEvent[S]{
+			Type:      StreamGraphStart,
+			GraphName: e.graph.name,
+			State:     initialState,
+		})
+
+		result, err := e.Run(ctx, initialState, opts...)
+
+		if err == nil && result != nil {
+			stream.Send(&StreamEvent[S]{
+				Type:      StreamGraphEnd,
+				GraphName: e.graph.name,
+				State:     result.FinalState,
+			})
+		}
+
+		if err != nil {
+			stream.CloseWithError(err)
+		} else {
+			stream.Close()
+		}
+	}()
+
+	return stream, nil
+}
+
 // execNode runs a single node, honouring per-node timeouts and emitting hook events.
 func (e *Engine[S]) execNode(ctx context.Context, _ *runConfig, hook Hook[S], name string, state S) (S, error) {
 	node := e.graph.nodes[name]
@@ -272,4 +318,53 @@ func newID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// ── streamHook ──────────────────────────────────────────────────────────────────
+
+// streamHook writes execution events to a stream.
+type streamHook[S any] struct {
+	stream    *Stream[*StreamEvent[S]]
+	graphName string
+}
+
+func (h *streamHook[S]) OnGraphStart(ctx context.Context, graphName string, state S) {
+	h.stream.Send(&StreamEvent[S]{
+		Type:      StreamGraphStart,
+		GraphName: graphName,
+		State:     state,
+	})
+}
+
+func (h *streamHook[S]) OnGraphEnd(ctx context.Context, graphName string, state S, err error) {
+	h.stream.Send(&StreamEvent[S]{
+		Type:      StreamGraphEnd,
+		GraphName: graphName,
+		State:     state,
+		Error:     err,
+	})
+}
+
+func (h *streamHook[S]) OnNodeStart(ctx context.Context, nodeName string, state S) {
+	h.stream.Send(&StreamEvent[S]{
+		Type:      StreamNodeStart,
+		GraphName: h.graphName,
+		NodeName:  nodeName,
+		State:     state,
+	})
+}
+
+func (h *streamHook[S]) OnNodeEnd(ctx context.Context, nodeName string, state S, err error, duration time.Duration) {
+	h.stream.Send(&StreamEvent[S]{
+		Type:      StreamNodeEnd,
+		GraphName: h.graphName,
+		NodeName:  nodeName,
+		State:     state,
+		Error:     err,
+		Duration:  duration,
+	})
+}
+
+func (h *streamHook[S]) OnRetry(ctx context.Context, nodeName string, attempt int, lastErr error) {
+	// Optionally stream retry events
 }

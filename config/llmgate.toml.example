@@ -1,14 +1,14 @@
-# Graphflow LLM Configuration
-# cp llmgate.toml.example llmgate.toml, then fill in your API keys.
+# Graphflow LLM 配置文件
+# cp llmgate.toml.example llmgate.toml，然后填入你的 API key。
 #
-# Two ways to configure:
-#   1. Direct key:   key = "sk-xxx"
-#   2. Env variable: key = "${DEEPSEEK_KEY}"
+# 两种配置方式：
+#   1. 直接写入 key：  key = "sk-xxx"
+#   2. 环境变量引用：  key = "${DEEPSEEK_KEY}"
 #
-# To run the agent demo with a real model:
+# 用真实模型运行 Agent Demo：
 #   go run ./examples/agent_demo/ -config config/llmgate.toml -model deepseek
 
-# ── Providers (uncomment the one you want to use) ─────────────────────────────
+# ── 供应商（取消注释你要用的那个） ─────────────────────────────
 [[providers]]
 name = "deepseek"
 key = "${DEEPSEEK_KEY}"
@@ -25,7 +25,7 @@ key = "${DEEPSEEK_KEY}"
 # name = "glm"
 # key = "${GLM_KEY}"
 
-# ── Routing (optional) ────────────────────────────────────────────────────────
+# ── 路由策略（可选） ──────────────────────────────────────────
 [strategy]
 primary = "deepseek"
 # fallback = ["glm", "minimax"]

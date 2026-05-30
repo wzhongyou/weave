@@ -1,8 +1,8 @@
-# Contributing to Graphflow
+# 为 Graphflow 做贡献
 
-Thank you for your interest in contributing!
+感谢你愿意来帮忙！
 
-## Getting Started
+## 开始
 
 ```bash
 git clone https://github.com/wzhongyou/graphflow.git
@@ -11,25 +11,25 @@ go build ./...
 go vet ./...
 ```
 
-## Reporting Issues
+## 报告问题
 
-- Search existing issues before opening a new one.
-- Include Go version, OS, and a minimal reproducible example.
+- 提交新 issue 前请先搜索已有 issue。
+- 请包含 Go 版本、操作系统和最小可复现示例。
 
-## Submitting a Pull Request
+## 提交 Pull Request
 
-1. Fork the repo and create a branch from `main`.
-2. Keep changes focused — one feature or fix per PR.
-3. Ensure `go vet ./...` passes with no warnings.
-4. Add or update tests for non-trivial logic.
-5. Public APIs must have doc comments.
+1. Fork 本仓库并从 `main` 创建分支。
+2. 保持改动聚焦——一个 PR 只做一个功能或修复。
+3. 确保 `go vet ./...` 零警告通过。
+4. 非简单逻辑请添加或更新测试。
+5. 公开 API 必须有文档注释。
 
-## Commit Messages
+## 提交信息
 
-Use the conventional format:
+使用约定式提交格式：
 
 ```
-<type>: <short summary>
+<类型>: <简要说明>
 
 feat: add RAGAgent.BuildGraph
 fix: handle nil state in Engine.Run
@@ -38,14 +38,14 @@ refactor: simplify back-edge detection in Compile
 test: add parallel fan-out integration test
 ```
 
-Types: `feat` · `fix` · `docs` · `refactor` · `test` · `chore`
+类型：`feat` · `fix` · `docs` · `refactor` · `test` · `chore`
 
-## Code Style
+## 代码风格
 
-- Follow standard Go conventions (`gofmt`, `golint`).
-- No comments that describe *what* the code does — only *why* when non-obvious.
-- Prefer explicit over clever.
+- 遵循标准 Go 规范（`gofmt`、`golint`）。
+- 不要写描述代码*做了什么*的注释——只在需要的地方写*为什么*。
+- 优先显式而非花哨。
 
-## License
+## 许可证
 
-By contributing, you agree your contributions will be licensed under the [MIT License](LICENSE).
+提交即表示你同意你的贡献将适用 [MIT 许可证](LICENSE)。

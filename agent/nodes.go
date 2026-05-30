@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/wzhongyou/graphflow/graph"
 )
 
 // LLMNodeConfig configures an LLMNode.
@@ -16,6 +18,8 @@ type LLMNodeConfig struct {
 	MaxTokens    *int
 	ThinkingType string // "disabled" to disable reasoning/thinking mode
 	Stream       bool
+	OnChunk      func(*StreamChunk)        // called for each streaming chunk
+	StructuredOutput *StructuredOutputConfig // structured output config
 }
 
 // LLMNode calls an LLM and appends the assistant reply to MessageState.Messages.
@@ -35,6 +39,11 @@ func (n *LLMNode) Run(ctx context.Context, s *MessageState) (*MessageState, erro
 		ThinkingType: n.cfg.ThinkingType,
 	}
 
+	// If structured output is configured, add JSON schema to system prompt
+	if n.cfg.StructuredOutput != nil {
+		req.ResponseFormat = n.cfg.StructuredOutput.Schema
+	}
+
 	var resp *ChatResponse
 	var err error
 	if n.cfg.Stream {
@@ -44,6 +53,13 @@ func (n *LLMNode) Run(ctx context.Context, s *MessageState) (*MessageState, erro
 	}
 	if err != nil {
 		return s, err
+	}
+
+	// Validate structured output if configured
+	if n.cfg.StructuredOutput != nil && resp.Content != "" && len(resp.ToolCalls) == 0 {
+		if _, err := ValidateStructuredOutput(resp.Content, n.cfg.StructuredOutput.Schema); err != nil {
+			return s, fmt.Errorf("structured output: %w", err)
+		}
 	}
 
 	msg := Message{
@@ -62,16 +78,37 @@ func (n *LLMNode) Run(ctx context.Context, s *MessageState) (*MessageState, erro
 }
 
 func (n *LLMNode) buildMessages(s *MessageState) []Message {
-	messages := s.Messages
-	if n.cfg.SystemPrompt == "" {
-		return messages
-	}
-	for _, m := range messages {
-		if m.Role == RoleSystem {
-			return messages
+	systemMsg := n.cfg.SystemPrompt
+
+	// Append structured output instruction if configured
+	if n.cfg.StructuredOutput != nil {
+		instruction := n.cfg.StructuredOutput.BuildInstruction()
+		if systemMsg != "" {
+			systemMsg += "\n\n" + instruction
+		} else {
+			systemMsg = instruction
 		}
 	}
-	return append([]Message{{Role: RoleSystem, Content: n.cfg.SystemPrompt}}, messages...)
+
+	if systemMsg == "" {
+		return s.Messages
+	}
+	for i, m := range s.Messages {
+		if m.Role == RoleSystem {
+			if n.cfg.StructuredOutput != nil {
+				s.Messages[i].Content += "\n\n" + n.cfg.StructuredOutput.BuildInstruction()
+			}
+			return s.Messages
+		}
+	}
+	return append([]Message{{Role: RoleSystem, Content: systemMsg}}, s.Messages...)
+}
+
+func instructionOf(cfg *StructuredOutputConfig) string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.BuildInstruction()
 }
 
 func (n *LLMNode) chatStream(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
@@ -92,6 +129,9 @@ func (n *LLMNode) chatStream(ctx context.Context, req *ChatRequest) (*ChatRespon
 		}
 		if chunk.Usage != nil {
 			usage = chunk.Usage
+		}
+		if n.cfg.OnChunk != nil {
+			n.cfg.OnChunk(chunk)
 		}
 	}
 	return &ChatResponse{
@@ -207,5 +247,92 @@ type HumanInputNode struct {
 // Run implements graph.NodeFunc[*MessageState].
 func (n *HumanInputNode) Run(ctx context.Context, s *MessageState) (*MessageState, error) {
 	// HITL requires an external channel/checkpoint mechanism; stub for now.
+	return s, nil
+}
+
+// ── Supervisor Node Types ──────────────────────────────────────────────────
+
+// supervisorRouteNode executes the sub-agent's graph for the routing target.
+type supervisorRouteNode struct {
+	subAgents map[string]SubAgent
+}
+
+// Run implements graph.NodeFunc[*MessageState].
+func (n *supervisorRouteNode) Run(ctx context.Context, s *MessageState) (*MessageState, error) {
+	if len(s.Messages) == 0 {
+		return s, nil
+	}
+	last := s.Messages[len(s.Messages)-1]
+	if len(last.ToolCalls) == 0 {
+		return s, nil
+	}
+
+	tc := last.ToolCalls[0]
+	agentName := tc.Name
+
+	// "complete" or "final_answer" means done
+	if agentName == "complete" || agentName == "final_answer" {
+		s.CurrentAgent = ""
+		s.NextAgent = ""
+		return s, nil
+	}
+
+	subAgent, ok := n.subAgents[agentName]
+	if !ok {
+		s.Messages = append(s.Messages, Message{
+			Role:       RoleTool,
+			Content:    fmt.Sprintf("未知的子智能体: %s", agentName),
+			ToolCallID: tc.ID,
+			ToolName:   tc.Name,
+			Timestamp:  time.Now(),
+		})
+		return s, nil
+	}
+
+	s.CurrentAgent = agentName
+	s.NextAgent = agentName
+
+	// Build and run sub-agent's graph with the current state
+	subGraph, subErr := subAgent.BuildGraph()
+	if subErr != nil {
+		s.Messages = append(s.Messages, Message{
+			Role:       RoleTool,
+			Content:    fmt.Sprintf("构建子智能体 %s 失败: %v", agentName, subErr),
+			ToolCallID: tc.ID,
+			ToolName:   tc.Name,
+			Timestamp:  time.Now(),
+		})
+		return s, nil
+	}
+
+	subEngine := graph.NewEngine(subGraph)
+	subResult, subErr := subEngine.Run(ctx, s)
+	if subErr != nil {
+		s.Messages = append(s.Messages, Message{
+			Role:       RoleTool,
+			Content:    fmt.Sprintf("运行子智能体 %s 失败: %v", agentName, subErr),
+			ToolCallID: tc.ID,
+			ToolName:   tc.Name,
+			Timestamp:  time.Now(),
+		})
+		return s, nil
+	}
+
+	// Merge sub-agent results back
+	*s = *subResult.FinalState
+	s.CompletedAgents = append(s.CompletedAgents, agentName)
+	s.CurrentAgent = ""
+	s.NextAgent = ""
+
+	return s, nil
+}
+
+// collectNode is a passthrough that aggregates results before returning to the supervisor.
+type collectNode struct{}
+
+// Run implements graph.NodeFunc[*MessageState].
+func (n *collectNode) Run(ctx context.Context, s *MessageState) (*MessageState, error) {
+	// State has already been updated by supervisorRouteNode.
+	// This node exists to provide a clear graph structure.
 	return s, nil
 }

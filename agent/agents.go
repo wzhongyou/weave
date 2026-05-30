@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/wzhongyou/graphflow/graph"
 )
@@ -31,6 +32,9 @@ func NewReActAgent(cfg ReActAgentConfig) *ReActAgent {
 	}
 	return &ReActAgent{cfg: cfg}
 }
+
+// Name returns the agent's name (implements SubAgent).
+func (a *ReActAgent) Name() string { return a.cfg.Name }
 
 // BuildGraph constructs and compiles the ReAct graph.
 // Structure: llm ──(has tool calls)──→ tool ──→ llm (loop)
@@ -97,6 +101,9 @@ func NewRAGAgent(cfg RAGAgentConfig) *RAGAgent {
 	return &RAGAgent{cfg: cfg}
 }
 
+// Name returns the agent's name (implements SubAgent).
+func (a *RAGAgent) Name() string { return a.cfg.Name }
+
 // BuildGraph constructs and compiles the RAG graph.
 // Structure: retrieve → llm
 func (a *RAGAgent) BuildGraph() (*graph.Graph[*MessageState], error) {
@@ -153,7 +160,84 @@ func NewSupervisorAgent(cfg SupervisorAgentConfig) *SupervisorAgent {
 }
 
 // BuildGraph constructs the supervisor orchestration graph.
-// TODO(A8): supervisor_llm → route → sub-agent subgraphs → aggregate
+// Structure: supervisor_llm → [route] → sub-agent → collect → supervisor_llm (loop)
 func (a *SupervisorAgent) BuildGraph() (*graph.Graph[*MessageState], error) {
-	return nil, fmt.Errorf("SupervisorAgent: not yet implemented (A8)")
+	agentNames := make([]string, 0, len(a.cfg.SubAgents))
+	for name := range a.cfg.SubAgents {
+		agentNames = append(agentNames, name)
+	}
+
+	supervisorSystemPrompt := fmt.Sprintf(`你是一个管理者智能体，负责将任务分派给子智能体。
+
+可用的子智能体：
+%s
+
+使用 "route" 工具将任务路由给合适的子智能体。
+当所有子智能体完成任务后，直接给用户最终回复，不需要再调用工具。`, strings.Join(agentNames, "\n"))
+
+	llmNode := NewLLMNode(LLMNodeConfig{
+		Model:        a.cfg.LLM,
+		SystemPrompt: supervisorSystemPrompt,
+		Tools:        []Tool{&routeTool{subAgents: a.cfg.SubAgents}},
+	})
+
+	g := graph.NewGraph[*MessageState](a.cfg.Name)
+	g.AddNode("supervisor", llmNode.Run)
+	g.AddNode("route", (&supervisorRouteNode{subAgents: a.cfg.SubAgents}).Run)
+	g.AddNode("collect", (&collectNode{}).Run)
+	g.SetEntryPoint("supervisor")
+
+	// If supervisor makes tool calls → route to sub-agent
+	g.AddCondition("supervisor", graph.Condition[*MessageState]{
+		If:     HasPendingToolCalls,
+		Target: "route",
+	})
+
+	// Route → collect → supervisor (loop back)
+	g.AddEdge("route", "collect")
+	g.AddEdge("collect", "supervisor")
+
+	g.SetMaxIterations("supervisor", a.cfg.MaxRounds)
+
+	if err := g.Compile(); err != nil {
+		return nil, fmt.Errorf("supervisor agent: %w", err)
+	}
+	return g, nil
+}
+
+// routeTool is a tool the supervisor uses to route to a sub-agent.
+type routeTool struct {
+	subAgents map[string]SubAgent
+}
+
+func (t *routeTool) Name() string { return "route" }
+func (t *routeTool) Description() string {
+	return "将当前任务路由给指定的子智能体来处理"
+}
+func (t *routeTool) Parameters() map[string]any {
+	agents := make([]string, 0, len(t.subAgents))
+	for name := range t.subAgents {
+		agents = append(agents, name)
+	}
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"agent": map[string]any{
+				"type":        "string",
+				"enum":        agents,
+				"description": "要路由到的子智能体名称",
+			},
+		},
+		"required": []string{"agent"},
+	}
+}
+func (t *routeTool) Execute(_ context.Context, args map[string]any) (string, error) {
+	agent, ok := args["agent"].(string)
+	if !ok {
+		return "", fmt.Errorf("route: 'agent' 参数必须为字符串")
+	}
+	if _, exists := t.subAgents[agent]; !exists {
+		return "", fmt.Errorf("route: 未知子智能体 %q", agent)
+	}
+	return fmt.Sprintf("正在路由到子智能体: %s", agent), nil
 }

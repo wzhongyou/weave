@@ -1,8 +1,8 @@
 package graph
 
-// OTelHook is a Hook implementation that emits OpenTelemetry spans and metrics.
+// OpenTelemetry integration for graph execution tracing.
 //
-// TODO(P7): implement using go.opentelemetry.io/otel
-//   spans: graph.graph.<name>, graph.node.<name>, graph.checkpoint.*
-//   metrics: graph.node.duration_ms, graph.node.executions, graph.graph.duration_ms
-type OTelHook[S any] struct{}
+// The OTelHook implementation has moved to github.com/wzhongyou/graphflow/graph/hooks.
+// Use hooks.NewOTelHook[S]() to create an OTel hook.
+//
+// See graph/hooks/otel.go for the full implementation.

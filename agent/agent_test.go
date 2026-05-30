@@ -36,7 +36,24 @@ func (m *testLLM) Chat(_ context.Context, req *ChatRequest) (*ChatResponse, erro
 }
 
 func (m *testLLM) ChatStream(_ context.Context, req *ChatRequest) (<-chan *StreamChunk, error) {
-	return nil, errors.New("streaming not implemented")
+	m.calls = append(m.calls, req)
+	ch := make(chan *StreamChunk, 2)
+	if len(req.Messages) > 0 {
+		last := req.Messages[len(req.Messages)-1]
+		if last.Role == RoleTool {
+			ch <- &StreamChunk{Content: "The answer is 42.", FinishReason: "stop"}
+			close(ch)
+			return ch, nil
+		}
+	}
+	ch <- &StreamChunk{
+		ToolCalls: []ToolCall{
+			{ID: "tc1", Name: "test_tool", Arguments: map[string]any{"a": "1"}},
+		},
+		FinishReason: "tool_calls",
+	}
+	close(ch)
+	return ch, nil
 }
 
 type testTool struct {
@@ -126,7 +143,10 @@ func (m *plainChatLLM) Chat(_ context.Context, _ *ChatRequest) (*ChatResponse, e
 	return &ChatResponse{Content: "hi back", FinishReason: "stop"}, nil
 }
 func (m *plainChatLLM) ChatStream(_ context.Context, _ *ChatRequest) (<-chan *StreamChunk, error) {
-	return nil, nil
+	ch := make(chan *StreamChunk, 1)
+	ch <- &StreamChunk{Content: "hi back", FinishReason: "stop"}
+	close(ch)
+	return ch, nil
 }
 
 func TestLLMNode_ToolCallResponse(t *testing.T) {
@@ -164,7 +184,13 @@ func (m *toolCallLLM) Chat(_ context.Context, _ *ChatRequest) (*ChatResponse, er
 	}, nil
 }
 func (m *toolCallLLM) ChatStream(_ context.Context, _ *ChatRequest) (<-chan *StreamChunk, error) {
-	return nil, nil
+	ch := make(chan *StreamChunk, 1)
+	ch <- &StreamChunk{
+		ToolCalls:    []ToolCall{{ID: "1", Name: "adder", Arguments: map[string]any{"a": 1, "b": 2}}},
+		FinishReason: "tool_calls",
+	}
+	close(ch)
+	return ch, nil
 }
 
 func TestLLMNode_SystemPromptPrepended(t *testing.T) {
@@ -206,8 +232,17 @@ type captureLLM struct {
 func (m *captureLLM) Chat(_ context.Context, req *ChatRequest) (*ChatResponse, error) {
 	return m.fn(req), nil
 }
-func (m *captureLLM) ChatStream(_ context.Context, _ *ChatRequest) (<-chan *StreamChunk, error) {
-	return nil, nil
+func (m *captureLLM) ChatStream(_ context.Context, req *ChatRequest) (<-chan *StreamChunk, error) {
+	resp := m.fn(req)
+	ch := make(chan *StreamChunk, 1)
+	ch <- &StreamChunk{
+		Content:      resp.Content,
+		ToolCalls:    resp.ToolCalls,
+		FinishReason: resp.FinishReason,
+		Usage:        resp.Usage,
+	}
+	close(ch)
+	return ch, nil
 }
 
 func TestLLMNode_SystemPromptNotDuplicated(t *testing.T) {

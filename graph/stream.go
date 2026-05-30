@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // Stream is a generic, closeable channel wrapper for streaming node output.
@@ -127,4 +128,24 @@ func Broadcast[T any](ctx context.Context, in <-chan T, n int) []*Stream[T] {
 		}
 	}()
 	return outs
+}
+
+// StreamEventType classifies a streamed execution event.
+type StreamEventType int
+
+const (
+	StreamGraphStart StreamEventType = iota
+	StreamGraphEnd
+	StreamNodeStart
+	StreamNodeEnd
+)
+
+// StreamEvent represents one event in a streamed graph execution.
+type StreamEvent[S any] struct {
+	Type      StreamEventType
+	GraphName string
+	NodeName  string
+	State     S
+	Error     error
+	Duration  time.Duration
 }

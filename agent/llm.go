@@ -8,7 +8,8 @@ type ChatRequest struct {
 	Tools        []ToolDef
 	Temperature  *float64
 	MaxTokens    *int
-	ThinkingType string // "disabled" to disable reasoning/thinking mode
+	ThinkingType string         // "disabled" to disable reasoning/thinking mode
+	ResponseFormat map[string]any // JSON Schema for structured output; nil = no constraint
 }
 
 // ChatResponse is the output from a non-streaming LLM call.

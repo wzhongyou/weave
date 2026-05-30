@@ -28,10 +28,3 @@ Thumbs.db
 .env.*
 config.local.*
 config/llmgate.toml
-
-# Research notes — local only, not published
-/research/
-
-# Localized docs (not committed)
-docs/*_zh.md
-README_zh.md
