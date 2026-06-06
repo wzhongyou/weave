@@ -2,10 +2,9 @@
 
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/wzhongyou/graphflow)](https://goreportcard.com/report/github.com/wzhongyou/graphflow)
 [![Go Reference](https://pkg.go.dev/badge/github.com/wzhongyou/graphflow.svg)](https://pkg.go.dev/github.com/wzhongyou/graphflow)
 
-**Graphflow** 是一个以图执行引擎为核心的 Go 原生 Agent 开发框架。
+**Graphflow** 是一个 Go 原生的通用图执行引擎，面向后端服务编排、工作流引擎、ETL 管道等场景。
 
 > 心智模型：**图 = 节点 + 边 + 状态机**。节点处理状态，边控制流转，引擎按 Pregel 超级步循环执行。跟写普通 Go 函数一样简单。
 
@@ -24,21 +23,27 @@ go get github.com/wzhongyou/graphflow
 ## 5 秒跑起来
 
 ```bash
-go run ./examples/agent_demo
+go run ./examples/workflow
 ```
 
-无需任何配置，Mock 模式直接运行：
+输出：
 
 ```
-[react-agent] 问题: What is 123 * 456?
-  [思考] → 调用工具: calculator  (12ms)
-  [观察] calculator: 56088
-  [思考] → 最终回答: 答案是 56088。
-
-[done] steps=3  duration=21ms
+═══ 场景 1: 正常订单 ═══
+[validate] 校验订单 ORD-001 (金额: 299.00)...
+  ✓ 校验通过
+[payment] 处理支付 299.00...
+  ✓ 支付成功
+[fulfill] 发货中...
+  ✓ 已发货
+[notify] 发送通知...
+  ✓ 通知已发送
+[正常订单] 完成
+  执行步骤: [validated paid fulfilled notified]
+  耗时: 434ms
 ```
 
-这就是一个 ReAct Agent：LLM 思考 → 调用计算器 → 返回结果。
+一个订单处理管线：校验 → 支付 → 条件路由（成功/失败）→ 发货 → 通知。
 
 ---
 
@@ -46,195 +51,93 @@ go run ./examples/agent_demo
 
 | 场景 | 适合吗 | 说明 |
 |------|--------|------|
-| 构建 AI Agent（工具调用、RAG、多步推理） | **最适合** | ReAct / RAG 开箱即用 |
-| 业务工作流编排（订单处理、ETL） | 适合 | 纯图引擎，跟 AI 无关 |
-| 需要非 Python 部署环境 | **最适合** | 单 Go 二进制，无 Python 运行时 |
+| 微服务编排（订单处理、审批流） | **最适合** | 图结构天然匹配业务流程 |
+| ETL / 数据管道 | **最适合** | 并行扇出 + 条件路由 |
+| 事件驱动架构 | 适合 | Hook 机制可观测每步执行 |
+| AI Agent 编排 | 适合 | 配合 [Cangjie](https://github.com/wzhongyou/cangjie) 使用 |
 | 需要弹性保障的生产环境 | **最适合** | 内置熔断、重试、超时、舱壁 |
-| Python 生态重度依赖（LangChain 等） | 不适合 | 考虑 LangGraph |
+| Python 生态重度依赖 | 不适合 | 考虑 Temporal / Airflow |
 
 ---
 
-## 为什么选择 Graphflow
+## 核心概念
 
-大多数 Agent 框架以 Python 为主，引入了沉重的运行时，且将编排逻辑与 AI 逻辑混在一起。Graphflow 的思路不同：
+### 节点函数
 
-| | Graphflow | LangGraph | Eino |
-|---|---|---|---|
-| 语言 | **Go** | Python | Go |
-| 核心抽象 | **图引擎** | StateGraph | Graph + Chain |
-| 无 Python 运行时 | **是** | 否 | **是** |
-| 核心零外部依赖 | **是** | 否 | 否 |
-| 内置弹性能力 | **熔断 / 重试 / 舱壁 / 限流** | 有限 | 有限 |
-
-### 功能对比
-
-| 功能 | Graphflow ✅ | Graft | Eino | LangChainGo |
-|------|-------------|-------|------|-------------|
-| 流式响应 | ✅ 完成 | ✅ | ✅ | ✅ |
-| 结构化输出 | ✅ 完成 | ✅ | ✅ | ✅ |
-| 多 Agent 编排 | ✅ 完成 | ✅ | ✅ | ❌ |
-| MCP 协议 | ✅ 完成 | ✅ | ❌ | ✅ |
-| OTel 追踪 | ✅ 完成 | ✅ | ✅ | ❌ |
-| Checkpoint 持久化 | ✅ 4种后端 | 2种 | ❌ | ✅ |
-| 弹性中间件 | ✅ 8种 | 有限 | 有限 | ❌ |
-| 19个LLM供应商 | ✅ | 多供应商 | 有限 | 多供应商 |
-| 核心零依赖 | ✅ | ❌（依赖 OTel） | ❌ | ❌（50+依赖） |
-| 流式图执行事件 | ✅ RunStream | ❌ | ❌ | ❌ |
-
----
-
-## 架构
-
-```
-┌──────────────────────────────────────────┐
-│  你的应用                                 │
-│  业务流程编排 · AI Agent 应用              │
-└─────────────────────┬────────────────────┘
-                      │
-┌─────────────────────▼────────────────────┐
-│  agent/   — Agent 开发层                  │
-│  MessageState · LLMNode · ToolNode       │
-│  ReAct · RAG · Supervisor 模式           │
-│  ToolRegistry · 内存管理                  │
-└─────────────────────┬────────────────────┘
-                      │ 依赖
-┌─────────────────────▼────────────────────┐
-│  graph/   — 图执行引擎                    │
-│  Graph[S] · Engine[S] · NodeFunc[S]      │
-│  顺序 · 条件路由 · 并行 · 循环             │
-│  Checkpoint · Hook · OTel               │
-│  middleware/ · node/ · checkpoint/       │
-└──────────────────────────────────────────┘
+```go
+// NodeFunc 接收状态，返回更新后的状态
+type NodeFunc[S any] func(ctx context.Context, state S) (S, error)
 ```
 
-`graph/` 包**与 AI 完全无关**——同样适用于业务流程编排、ETL 管道、事件驱动架构。`agent/` 包在其上提供 AI 专属的抽象层。
+所有节点共享同一个状态类型 `S`，编译时保证类型安全。
+
+### 边
+
+| 类型 | 语义 | 用法 |
+|------|------|------|
+| **普通边** | A 完成后无条件转移到 B | `g.AddEdge("A", "B")` |
+| **条件边** | A 完成后根据状态选择目标 | `g.AddCondition("A", ...)` |
+| **回边** | 回指上游，形成循环 | `g.AddEdge("B", "A")` |
+| **并行边** | A 有多个出边，自动扇出 | `g.AddEdge("A", "B")` + `g.AddEdge("A", "C")` |
 
 ---
 
 ## 快速开始
 
-### 1. Mock 模式（零配置，先跑起来）
+### 1. 定义状态和节点
 
 ```go
-package main
+type OrderState struct {
+    OrderID string
+    Amount  float64
+    Paid    bool
+    Steps   []string
+}
 
-import (
-    "context"
-    "fmt"
-    "github.com/wzhongyou/graphflow/agent"
-    "github.com/wzhongyou/graphflow/graph"
-)
-
-func main() {
-    ag := agent.NewReActAgent(agent.ReActAgentConfig{
-        Name:         "my-agent",
-        SystemPrompt: "你是一个有用的助手。",
-        Tools:        []agent.Tool{&agent.CalculatorTool{}},
-    })
-    g, err := ag.BuildGraph()
-    if err != nil {
-        panic(err)
+func processPayment(ctx context.Context, s OrderState) (OrderState, error) {
+    if s.Amount > 10000 {
+        return s, fmt.Errorf("余额不足")
     }
-
-    engine := graph.NewEngine(g)
-    result, err := engine.Run(context.Background(), &agent.MessageState{
-        Messages: []agent.Message{{Role: agent.RoleUser, Content: "100 + 200 是多少？"}},
-    })
-    if err != nil {
-        panic(err)
-    }
-    fmt.Println(result.FinalState.Messages[len(result.FinalState.Messages)-1].Content)
+    s.Paid = true
+    return s, nil
 }
 ```
 
-不传 `LLM` 字段，自动使用 Mock 模型（内置计算器），无需 API key。
-
-### 2. 接入真实 LLM
-
-Graphflow 通过 [llmgate](https://github.com/wzhongyou/llmgate) 接入 LLM（支持 19 个供应商）。
-
-```bash
-# 方式一：配置文件（推荐）
-cp config/llmgate.toml.example config/llmgate.toml   # 填入 API key
-go run ./examples/agent_demo -q "100 + 200 是多少？"
-
-# 方式二：环境变量
-export DEEPSEEK_KEY="sk-xxx"
-go run ./examples/agent_demo -env -provider deepseek -q "100 + 200 是多少？"
-```
-
-代码只需加 3 行：
+### 2. 构建图
 
 ```go
-import llmgate_adapter "github.com/wzhongyou/graphflow/agent/llmgate"
-import "github.com/wzhongyou/llmgate/sdk"
+g := graph.NewGraph[OrderState]("order-pipeline")
 
-gw, _ := sdk.NewFromFile("config/llmgate.toml")
-adapter := llmgate_adapter.New(gw, llmgate_adapter.Config{Provider: "deepseek"})
+g.AddNode("validate", validateOrder)
+g.AddNode("payment",  processPayment)
+g.AddNode("fulfill",  fulfillOrder)
+g.AddNode("cancel",   cancelOrder)
+g.AddNode("notify",   sendNotification)
 
-ag := agent.NewReActAgent(agent.ReActAgentConfig{
-    LLM: adapter,  // 传入 LLM 即可
-    // ...
+g.SetEntryPoint("validate")
+g.AddEdge("validate", "payment")
+
+// 条件路由：失败 → cancel，成功 → fulfill
+g.AddCondition("payment", graph.Condition[OrderState]{
+    If:     func(ctx context.Context, s OrderState) bool { return s.Error != "" },
+    Target: "cancel",
 })
-```
+g.AddEdge("payment", "fulfill") // 无条件走 fulfill（"else" 分支）
 
-### 3. 手动搭图（更多控制）
-
-```go
-llmNode   := agent.NewLLMNode(agent.LLMNodeConfig{Model: adapter, Tools: tools})
-toolNode  := agent.NewToolNode(tools...)
-
-g := graph.NewGraph[*agent.MessageState]("react-agent")
-g.AddNode("llm", llmNode.Run)
-g.AddNode("tool", toolNode.Run)
-g.SetEntryPoint("llm")
-g.AddCondition("llm", graph.Condition[*agent.MessageState]{
-    If:     agent.HasPendingToolCalls,
-    Target: "tool",
-})
-g.AddEdge("tool", "llm")   // 回边，形成循环
-g.SetMaxIterations("llm", 20)
+g.AddEdge("fulfill", "notify")
 g.Compile()
 ```
 
----
-
-## 用 Hook 观测执行过程
-
-实现 `graph.Hook` 接口即可观测每一步的执行：
+### 3. 执行
 
 ```go
-type reactHook struct{}
-
-func (h *reactHook) OnNodeStart(_ context.Context, node string, s *agent.MessageState) {
-    if node == "llm" {
-        fmt.Printf("[开始] LLM 思考中...\n")
-    }
-}
-
-func (h *reactHook) OnNodeEnd(_ context.Context, node string, s *agent.MessageState, _ error, dur time.Duration) {
-    last := s.Messages[len(s.Messages)-1]
-    switch node {
-    case "llm":
-        if len(last.ToolCalls) > 0 {
-            fmt.Printf("[思考] → 调用工具: %s  (%s)\n", last.ToolCalls[0].Name, dur)
-        } else {
-            fmt.Printf("[思考] → 最终回答: %s\n", last.Content)
-        }
-    case "tool":
-        for _, m := range s.Messages {
-            if m.Role == agent.RoleTool {
-                fmt.Printf("[观察] %s: %s\n", m.ToolName, m.Content)
-            }
-        }
-    }
-}
-
-// 使用
-engine.Run(ctx, state, graph.WithHook(&reactHook{}))
+engine := graph.NewEngine(g)
+result, err := engine.Run(ctx, OrderState{
+    OrderID: "ORD-001",
+    Amount:  299.00,
+})
+fmt.Println(result.FinalState.Steps) // [validated paid fulfilled notified]
 ```
-
-Hook 接口完整方法：`OnGraphStart` · `OnGraphEnd` · `OnNodeStart` · `OnNodeEnd` · `OnError`。多个 Hook 可用 `graph.ComposeHooks` 组合。
 
 ---
 
@@ -243,8 +146,7 @@ Hook 接口完整方法：`OnGraphStart` · `OnGraphEnd` · `OnNodeStart` · `On
 节点函数是普通的 `func(ctx, state) (state, error)`——直接用中间件包装：
 
 ```go
-// 推荐组合顺序（由外到内）
-node := middleware.WithRecover("payment",           // panic → error
+node := middleware.WithRecover("payment",
     middleware.WithTimeout(chargePayment, 5*time.Second,
         middleware.WithRetry(chargePayment, middleware.RetryPolicy{
             MaxAttempts: 3,
@@ -259,45 +161,77 @@ g.AddNode("charge", node)
 
 ---
 
-## 更多 Agent 模式
-
-### RAG Agent
+## Hook 可观测
 
 ```go
-ag := agent.NewRAGAgent(agent.RAGAgentConfig{
-    Name:         "rag-agent",
-    LLM:          adapter,
-    Embedder:     embedder,
-    VectorStore:  vectorStore,
-    SystemPrompt: "基于提供的文档回答问题。",
-})
-g, _ := ag.BuildGraph()
+type myHook struct{}
+
+func (h *myHook) OnNodeStart(ctx context.Context, node string, s MyState) {
+    log.Printf("[%s] 开始执行", node)
+}
+func (h *myHook) OnNodeEnd(ctx context.Context, node string, s MyState, err error, d time.Duration) {
+    log.Printf("[%s] 完成 (%v)", node, d)
+}
+
+engine.Run(ctx, state, graph.WithHook(&myHook{}))
 ```
 
-`Embedder` 和 `VectorStore` 是实现 `agent.Embedder` / `agent.VectorStore` 接口的任意实现，框架不绑定具体向量数据库。
+Hook 接口：`OnGraphStart` · `OnGraphEnd` · `OnNodeStart` · `OnNodeEnd` · `OnError`。多个 Hook 可用 `graph.ComposeHooks` 组合。
 
-### 业务工作流（纯图，无 AI）
+内置 Hook：`graph/hooks/otel.go` — OpenTelemetry 追踪，开箱即用。
+
+---
+
+## Checkpoint 持久化
 
 ```go
-g := graph.NewGraph[OrderState]("order-pipeline")
-g.AddNode("validate",  validateOrder)
-g.AddNode("charge",    chargePayment)
-g.AddNode("fulfill",   fulfillOrder)
-g.AddNode("notify",    sendNotification)
-g.SetEntryPoint("validate")
-g.AddEdge("validate", "charge")
-g.AddEdge("charge",   "fulfill")
-g.AddEdge("fulfill",  "notify")
-g.Compile()
+// 内存（开发/测试）
+cp := checkpoint.NewMemoryManager()
 
-engine := graph.NewEngine(g)
-result, err := engine.Run(ctx, initialState,
-    graph.WithTimeout(30*time.Second),
-    graph.WithCheckpoint(checkpoint.NewFileManager("/tmp/cp")),
-)
-if err != nil {
-    // 可通过 graph.IsRetryableError / graph.IsCircuitOpenError 区分错误类型
+// 文件（单机生产）
+cp := checkpoint.NewFileManager("/var/graphflow/checkpoints")
+
+// Redis（分布式）
+cp := checkpoint.NewRedisManager("redis://localhost:6379")
+
+// SQLite（嵌入式）
+cp := checkpoint.NewSQLiteManager("/var/graphflow/state.db")
+
+engine.Run(ctx, state, graph.WithCheckpoint(cp))
+```
+
+节点失败后可从上次 checkpoint 恢复，无需从头重跑。
+
+---
+
+## 流式执行
+
+```go
+stream, _ := engine.RunStream(ctx, initialState)
+for event := range stream.Chan() {
+    switch event.Type {
+    case graph.StreamNodeStart:
+        fmt.Printf("▶ %s 开始\n", event.NodeName)
+    case graph.StreamNodeEnd:
+        fmt.Printf("■ %s 完成 (%v)\n", event.NodeName, event.Duration)
+    case graph.StreamGraphEnd:
+        fmt.Println("◆ 图执行完成")
+    }
 }
+```
+
+---
+
+## 常用执行选项
+
+```go
+engine.Run(ctx, state,
+    graph.WithTimeout(30*time.Second),
+    graph.WithCheckpoint(cp),
+    graph.WithAutoCheckpoint(1000), // 每 1000 步自动保存
+    graph.WithMaxIterations(500),
+    graph.WithHook(myHook),
+)
 ```
 
 ---
@@ -309,77 +243,85 @@ graphflow/
 ├── graph/                  # 核心图引擎（import "…/graph"）
 │   ├── graph.go            # Graph[S]、NodeFunc、Condition、MergeFunc
 │   ├── engine.go           # Engine[S].Run — Pregel 超级步执行循环
+│   ├── engine_parallel.go  # 并行扇出 / 扇入
+│   ├── engine_loop.go      # 循环 / 回边执行
 │   ├── hooks.go            # Hook[S] 接口、ComposeHooks
 │   ├── errors.go           # 结构化错误类型
+│   ├── stream.go           # Stream[T] — Send / Chan / Merge / Broadcast
+│   ├── config.go           # YAML 配置加载
+│   ├── registry.go         # 节点注册表
+│   ├── result.go           # ExecutionResult[S]
 │   ├── middleware/         # NodeFunc 装饰器
 │   │   ├── retry.go
 │   │   ├── circuitbreaker.go
 │   │   ├── bulkhead.go
-│   │   └── ...
-│   ├── node/               # 内置节点（HTTP、Delay、Transform、Noop）
-│   └── checkpoint/         # 持久化（内存 · 文件 · Redis · SQLite）
-│
-├── agent/                  # Agent 层（import "…/agent"）
-│   ├── state.go            # MessageState、Message、ToolCall
-│   ├── llm.go              # LLMModel、Embedder、VectorStore 接口
-│   ├── nodes.go            # LLMNode、ToolNode、VectorRetrieveNode、HumanInputNode
-│   ├── tools.go            # Tool 接口、ToolRegistry、CalculatorTool
-│   ├── agents.go           # ReActAgent、RAGAgent、SupervisorAgent
-│   ├── memory.go           # ShortTermMemory、LongTermMemory
-│   └── llmgate/            # llmgate 适配器（实现 LLMModel 接口）
-│
-├── config/                 # 配置模板
-│   └── llmgate.toml.example
-│
-├── examples/
-│   ├── agent_demo/         # ReAct Agent 基础示例（mock + 真实 LLM）
-│   ├── streaming/          # 流式响应 — OnChunk + RunStream
-│   ├── supervisor/         # 多智能体编排 — Supervisor 路由
-│   ├── structured_output/  # 结构化输出 — JSON Schema 约束与校验
-│   ├── workflow/           # 业务工作流 — 纯图引擎（无 AI）
-│   └── mcp/                # MCP 协议客户端连接与工具发现
+│   │   ├── timeout.go
+│   │   ├── ratelimit.go
+│   │   ├── recover.go
+│   │   ├── validate.go
+│   │   └── cache.go
+│   ├── node/               # 内置节点
+│   │   ├── http.go          # HTTP 请求节点
+│   │   ├── delay.go         # 延迟节点
+│   │   ├── transform.go     # 状态转换节点
+│   │   └── noop.go          # 空操作节点
+│   ├── checkpoint/         # 持久化后端
+│   │   ├── memory.go        # 内存
+│   │   ├── file.go          # 文件
+│   │   ├── redis/           # Redis
+│   │   └── sqlite/          # SQLite
+│   └── hooks/
+│       └── otel.go          # OpenTelemetry Hook
+```
+
+---
+
+## 与其他方案对比
+
+| | Graphflow | Temporal | Conductor | Uber Cadence |
+|---|---|---|---|---|
+| 语言 | **Go** | 多语言 SDK | Java | Go / Java |
+| 部署模型 | **库嵌入** | Server + Worker | Server | Server |
+| 核心零外部依赖 | **是** | 否 | 否 | 否 |
+| 单二进制 | **是** | 否 | 否 | 否 |
+| 弹性中间件 | **8 种** | 内置 | 有限 | 有限 |
+| 复杂度 | 低 | 高 | 中 | 高 |
+
+Graphflow 不是 Temporal 的替代品——Temporal 有分布式调度、多语言 SDK、可视化管理台。Graphflow 的定位是**库级图引擎**：不需要独立服务，`go get` 即用，适合嵌入已有 Go 服务做内部编排。
+
+---
+
+## 与 Cangjie 的关系
+
+[**Cangjie（仓颉）**](https://github.com/wzhongyou/cangjie) 是基于 Graphflow 构建的终端 AI 编程助手。Graphflow 提供图执行引擎，Cangjie 在其上构建 Agent 循环、工具系统、TUI 界面。
+
+```
+Graphflow  → 图执行引擎（这个仓库）
+Cangjie    → AI 编程助手（import graphflow）
 ```
 
 ---
 
 ## 路线图
 
-### 核心层（graph/）
-- [x] 图模型——顺序执行、条件路由
-- [x] 循环 / 回边检测与迭代限制
-- [x] Hook 接口 + ComposeHooks
-- [x] 弹性中间件套件
-- [x] 内置节点（HTTP、Delay、Transform、Noop）
-- [x] 结构化错误类型
+- [x] 图模型——顺序执行、条件路由、循环
 - [x] 并行扇出 / 扇入
-- [x] Stream[T] — Send / Chan / Merge / Broadcast
-- [x] Checkpoint——内存、文件
-- [x] RunStream — 流式执行事件（通过 Hook 机制）
-- [x] OTelHook — OpenTelemetry 追踪（graph/hooks/ 子包）
-- [ ] YAML 配置 + LoadFromFile
-
-### Agent 层（agent/）
-- [x] MessageState、Message、ToolCall 类型（A1）
-- [x] LLMModel / Embedder / VectorStore 接口（A2）
-- [x] LLMNode、ToolNode 真实实现，支持 tool calling（A3）
-- [x] VectorRetrieveNode、HumanInputNode（A3）
-- [x] Tool 接口 + ToolRegistry + CalculatorTool（A4）
-- [x] ShortTermMemory、LongTermMemory（A5）
-- [x] ReActAgent.BuildGraph（A6）
-- [x] RAGAgent.BuildGraph（A7）
-- [x] llmgate 适配器 — 19 个供应商、降级、策略路由
-- [x] SupervisorAgent.BuildGraph — 多智能体编排（A8）
-- [x] 流式响应 — LLMNode.OnChunk 回调 + Engine.RunStream（A9）
-- [x] 结构化输出 — JSON Schema 约束与校验（A10）
-- [x] MCP 协议支持 — 通过 MCP 服务器发现和调用工具
+- [x] Hook 接口 + OpenTelemetry 追踪
+- [x] 弹性中间件套件（8 种）
+- [x] 内置节点（HTTP、Delay、Transform、Noop）
+- [x] Checkpoint 持久化（4 种后端）
+- [x] 流式执行事件
+- [x] YAML 配置加载 + 节点注册表
+- [ ] 分布式执行
+- [ ] 可视化编排调试
 
 ---
 
 ## 贡献指南
 
 1. Fork 本仓库
-2. 创建特性分支（`git checkout -b feature/amazing-feature`）
-3. 提交更改（`git commit -m 'Add amazing feature'`）
+2. 创建特性分支
+3. 提交更改
 4. 推送并发起 Pull Request
 
 请确保：`go vet ./...` 通过，新公开 API 有文档注释，非简单逻辑有单元测试。
