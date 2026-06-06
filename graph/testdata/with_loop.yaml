@@ -1,0 +1,25 @@
+name: loop-pipeline
+version: "1.0"
+entry: loop_start
+nodes:
+  - name: loop_start
+    type: identity
+  - name: process
+    type: add
+  - name: done
+    type: identity
+edges:
+  - from: loop_start
+    to: process
+  - from: process
+    to: loop_start
+    condition: loop_check
+    branches:
+      - when: continue
+        to: loop_start
+      - when: default
+        to: done
+loops:
+  - node: loop_start
+    max_iterations: 10
+    exit_condition: loop_exit

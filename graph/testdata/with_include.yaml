@@ -1,0 +1,11 @@
+name: include-pipeline
+version: "1.0"
+entry: start
+include:
+  - included_nodes.yaml
+nodes:
+  - name: start
+    type: identity
+edges:
+  - from: start
+    to: extra

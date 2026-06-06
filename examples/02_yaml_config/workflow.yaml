@@ -1,0 +1,28 @@
+name: order-pipeline
+version: "1.0"
+entry: validate
+
+nodes:
+  - name: validate
+    type: validate
+  - name: payment
+    type: payment
+  - name: fulfill
+    type: fulfill
+  - name: cancel
+    type: cancel
+  - name: notify
+    type: notify
+
+edges:
+  - from: validate
+    to: payment
+  - from: payment
+    condition: payment_check
+    branches:
+      - when: failed
+        to: cancel
+      - when: default
+        to: fulfill
+  - from: fulfill
+    to: notify

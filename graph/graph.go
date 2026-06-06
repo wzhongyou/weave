@@ -4,8 +4,12 @@ package graph
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -213,9 +217,170 @@ func (g *Graph[S]) DOT() string {
 }
 
 // LoadFromFile loads a graph from a YAML config file and the provided registry.
-// TODO(P1): implement — requires gopkg.in/yaml.v3; use programmatic API for now.
 func LoadFromFile[S any](path string, reg *Registry[S]) (*Graph[S], error) {
-	return nil, fmt.Errorf("LoadFromFile: not yet implemented; use programmatic API")
+	cfg, err := loadConfigFile(path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	g := NewGraph[S](cfg.Name)
+
+	// Register nodes.
+	for _, ndef := range cfg.Nodes {
+		fn, ok := reg.lookupNode(ndef.Type)
+		if !ok {
+			return nil, fmt.Errorf("LoadFromFile: node %q references unknown type %q", ndef.Name, ndef.Type)
+		}
+		g.AddNode(ndef.Name, fn)
+		if ndef.Timeout != "" {
+			d, err := time.ParseDuration(ndef.Timeout)
+			if err != nil {
+				return nil, fmt.Errorf("LoadFromFile: node %q: invalid timeout %q: %w", ndef.Name, ndef.Timeout, err)
+			}
+			g.SetNodeTimeout(ndef.Name, d)
+		}
+	}
+
+	// Register edges.
+	for _, edef := range cfg.Edges {
+		if err := applyEdgeDef(g, reg, edef); err != nil {
+			return nil, err
+		}
+	}
+
+	// Register loops.
+	for _, ldef := range cfg.Loops {
+		if ldef.MaxIterations > 0 {
+			g.SetMaxIterations(ldef.Node, ldef.MaxIterations)
+		}
+		if ldef.ExitCondition != "" {
+			exitFn, ok := reg.lookupExit(ldef.ExitCondition)
+			if !ok {
+				return nil, fmt.Errorf("LoadFromFile: loop on %q references unknown exit condition %q", ldef.Node, ldef.ExitCondition)
+			}
+			g.SetLoopExit(ldef.Node, exitFn)
+		}
+	}
+
+	g.SetEntryPoint(cfg.Entry)
+
+	if err := g.Compile(); err != nil {
+		return nil, fmt.Errorf("LoadFromFile: compile: %w", err)
+	}
+
+	return g, nil
+}
+
+// ── Config loading helpers ────────────────────────────────────────────────────
+
+// loadConfigFile reads a YAML config file, resolves includes, and returns the merged config.
+func loadConfigFile(path string, seen map[string]bool) (*Config, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("loadConfig: %w", err)
+	}
+
+	if seen == nil {
+		seen = make(map[string]bool)
+	}
+	if seen[absPath] {
+		return nil, fmt.Errorf("loadConfig: circular include detected: %s", path)
+	}
+	seen[absPath] = true
+
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("loadConfig: read %s: %w", path, err)
+	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("loadConfig: parse %s: %w", path, err)
+	}
+
+	baseDir := filepath.Dir(absPath)
+	for _, inc := range cfg.Include {
+		incPath := filepath.Join(baseDir, inc)
+		subCfg, err := loadConfigFile(incPath, seen)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Nodes = append(cfg.Nodes, subCfg.Nodes...)
+		cfg.Edges = append(cfg.Edges, subCfg.Edges...)
+		cfg.Loops = append(cfg.Loops, subCfg.Loops...)
+	}
+
+	return &cfg, nil
+}
+
+// applyEdgeDef adds edges from a single EdgeDef to the graph.
+func applyEdgeDef[S any](g *Graph[S], reg *Registry[S], edef EdgeDef) error {
+	fromList := edef.From.Slice()
+	toList := edef.To.Slice()
+
+	switch {
+	case edef.Condition != "" && len(edef.Branches) > 0:
+		// Conditional edge: one source, condition function evaluates to branch name.
+		if len(fromList) != 1 {
+			return fmt.Errorf("LoadFromFile: conditional edge with multi-from is not supported (from=%v)", fromList)
+		}
+		condFn, ok := reg.lookupCondition(edef.Condition)
+		if !ok {
+			return fmt.Errorf("LoadFromFile: condition %q not registered", edef.Condition)
+		}
+		from := fromList[0]
+		for _, branch := range edef.Branches {
+			if branch.When == "default" {
+				g.AddCondition(from, Condition[S]{If: nil, Target: branch.To})
+			} else {
+				when := branch.When
+				target := branch.To
+				g.AddCondition(from, Condition[S]{
+					If:     func(ctx context.Context, state S) bool { return condFn(ctx, state) == when },
+					Target: target,
+				})
+			}
+		}
+
+	case edef.Condition != "" && len(edef.Branches) == 0:
+		return fmt.Errorf("LoadFromFile: condition %q set but no branches defined", edef.Condition)
+
+	case len(fromList) > 1:
+		// Fan-in: multiple sources → single target.
+		if len(toList) != 1 {
+			return fmt.Errorf("LoadFromFile: fan-in edge requires exactly one 'to' (got %v)", toList)
+		}
+		to := toList[0]
+		if edef.Merge != "" {
+			mergeFn, ok := reg.lookupMerge(edef.Merge)
+			if !ok {
+				return fmt.Errorf("LoadFromFile: merge %q not registered", edef.Merge)
+			}
+			g.SetMergeFunc(to, mergeFn)
+		}
+		for _, from := range fromList {
+			g.AddEdge(from, to)
+		}
+
+	case len(toList) > 1:
+		// Fan-out: single source → multiple targets (parallel).
+		if len(fromList) != 1 {
+			return fmt.Errorf("LoadFromFile: fan-out with multi-from is not supported (from=%v, to=%v)", fromList, toList)
+		}
+		for _, to := range toList {
+			g.AddEdge(fromList[0], to)
+		}
+
+	default:
+		// Simple edge: single from → single to.
+		if len(fromList) == 1 && len(toList) == 1 {
+			g.AddEdge(fromList[0], toList[0])
+		} else {
+			return fmt.Errorf("LoadFromFile: invalid edge (from=%v, to=%v)", fromList, toList)
+		}
+	}
+
+	return nil
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -1,5 +1,11 @@
 package graph
 
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
+
 // Config is the top-level structure for a YAML workflow definition.
 type Config struct {
 	Name    string    `yaml:"name"`
@@ -51,5 +57,26 @@ type LoopDef struct {
 // OneOrMany deserialises a YAML field that can be a single string or a list.
 type OneOrMany []string
 
-// TODO(P1): implement UnmarshalYAML for OneOrMany
-// TODO(P1): implement loadConfig — read file, handle includes, merge sub-configs
+// UnmarshalYAML implements yaml.Unmarshaler so a OneOrMany field accepts both
+//
+//	from: "single_node"
+//
+// and
+//
+//	from: ["node_a", "node_b"]
+func (o *OneOrMany) UnmarshalYAML(value *yaml.Node) error {
+	var single string
+	if err := value.Decode(&single); err == nil {
+		*o = OneOrMany{single}
+		return nil
+	}
+	var many []string
+	if err := value.Decode(&many); err != nil {
+		return fmt.Errorf("oneOrMany: expected a string or a list of strings, got %s", value.Tag)
+	}
+	*o = OneOrMany(many)
+	return nil
+}
+
+// Slice returns the underlying []string.
+func (o OneOrMany) Slice() []string { return []string(o) }

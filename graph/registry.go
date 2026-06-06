@@ -39,3 +39,25 @@ func (r *Registry[S]) RegisterMerge(name string, fn MergeFunc[S]) {
 func (r *Registry[S]) RegisterExitCondition(name string, fn func(ctx context.Context, state S) bool) {
 	r.exits[name] = fn
 }
+
+// ── Internal accessors (used by LoadFromFile) ─────────────────────────────────
+
+func (r *Registry[S]) lookupNode(typeName string) (NodeFunc[S], bool) {
+	fn, ok := r.nodes[typeName]
+	return fn, ok
+}
+
+func (r *Registry[S]) lookupCondition(name string) (func(ctx context.Context, state S) string, bool) {
+	fn, ok := r.conditions[name]
+	return fn, ok
+}
+
+func (r *Registry[S]) lookupMerge(name string) (MergeFunc[S], bool) {
+	fn, ok := r.merges[name]
+	return fn, ok
+}
+
+func (r *Registry[S]) lookupExit(name string) (func(ctx context.Context, state S) bool, bool) {
+	fn, ok := r.exits[name]
+	return fn, ok
+}

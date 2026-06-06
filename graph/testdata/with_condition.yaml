@@ -1,0 +1,18 @@
+name: cond-pipeline
+version: "1.0"
+entry: check
+nodes:
+  - name: check
+    type: eval
+  - name: success
+    type: identity
+  - name: failure
+    type: identity
+edges:
+  - from: check
+    condition: result_check
+    branches:
+      - when: ok
+        to: success
+      - when: default
+        to: failure

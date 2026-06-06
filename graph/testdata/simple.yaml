@@ -1,0 +1,11 @@
+name: simple-pipeline
+version: "1.0"
+entry: start
+nodes:
+  - name: start
+    type: identity
+  - name: process
+    type: add
+edges:
+  - from: start
+    to: process
