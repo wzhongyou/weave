@@ -4,7 +4,7 @@ package node
 import (
 	"context"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // Noop returns the state unchanged. Useful as a placeholder or synchronisation point.

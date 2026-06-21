@@ -3,7 +3,7 @@ package middleware
 import (
 	"context"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // Cache stores and retrieves node results keyed by an idempotency key.

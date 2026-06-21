@@ -3,7 +3,7 @@ package middleware
 import (
 	"context"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // Bulkhead limits the number of concurrent executions of fn.

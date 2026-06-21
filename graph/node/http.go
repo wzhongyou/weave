@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // HTTPConfig configures an HTTP node.

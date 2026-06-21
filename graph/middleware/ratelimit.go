@@ -3,7 +3,7 @@ package middleware
 import (
 	"context"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // Limiter is the interface for rate-limiting strategies (token bucket, leaky bucket, etc.).

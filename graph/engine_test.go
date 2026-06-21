@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // ── helpers ──────────────────────────────────────────────────────────────────

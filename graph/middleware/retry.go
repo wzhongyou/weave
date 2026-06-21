@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // RetryPolicy configures retry behaviour.

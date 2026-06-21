@@ -44,8 +44,8 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph"
-	"github.com/wzhongyou/graphflow/server"
+	"github.com/wzhongyou/weave/graph"
+	"github.com/wzhongyou/weave/server"
 )
 
 // OrderState 订单状态。

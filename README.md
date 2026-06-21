@@ -1,10 +1,10 @@
-# Graphflow
+# Weave
 
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.21-blue)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Go Reference](https://pkg.go.dev/badge/github.com/wzhongyou/graphflow.svg)](https://pkg.go.dev/github.com/wzhongyou/graphflow)
+[![Go Reference](https://pkg.go.dev/badge/github.com/wzhongyou/weave.svg)](https://pkg.go.dev/github.com/wzhongyou/weave)
 
-**Graphflow** 是一个 Go 原生的通用图执行引擎，面向后端服务编排、工作流引擎、ETL 管道等场景。
+**Weave** 是一个 Go 原生的通用图执行引擎，面向后端服务编排、工作流引擎、ETL 管道等场景。
 
 > **一句话概括：图 = 节点 + 边 + 状态机**。节点处理状态，边控制流转，跟写普通 Go 函数一样简单。
 
@@ -13,7 +13,7 @@
 ## 安装
 
 ```bash
-go get github.com/wzhongyou/graphflow
+go get github.com/wzhongyou/weave
 ```
 
 需要 Go 1.21+。核心引擎 `graph/` 零外部依赖。
@@ -47,7 +47,7 @@ go run ./examples/workflow
 
 ---
 
-## 什么时候用 Graphflow
+## 什么时候用 Weave
 
 | 场景 | 适合吗 | 说明 |
 |------|--------|------|
@@ -189,13 +189,13 @@ Hook 接口：`OnGraphStart` · `OnGraphEnd` · `OnNodeStart` · `OnNodeEnd` · 
 cp := checkpoint.NewMemoryManager()
 
 // 文件（单机生产）
-cp := checkpoint.NewFileManager("/var/graphflow/checkpoints")
+cp := checkpoint.NewFileManager("/var/weave/checkpoints")
 
 // Redis（分布式）
 cp := checkpoint.NewRedisManager("redis://localhost:6379")
 
 // SQLite（嵌入式）
-cp := checkpoint.NewSQLiteManager("/var/graphflow/state.db")
+cp := checkpoint.NewSQLiteManager("/var/weave/state.db")
 
 engine.Run(ctx, state, graph.WithCheckpoint(cp))
 ```
@@ -239,7 +239,7 @@ engine.Run(ctx, state,
 ## 包结构
 
 ```
-graphflow/
+weave/
 ├── graph/                  # 核心图引擎（import "…/graph"）
 │   ├── graph.go            # Graph[S]、NodeFunc、Condition、MergeFunc
 │   ├── engine.go           # Engine[S].Run — Pregel 超级步执行循环
@@ -278,7 +278,7 @@ graphflow/
 
 ## 与其他方案对比
 
-| | Graphflow | Temporal | Conductor | Uber Cadence |
+| | Weave | Temporal | Conductor | Uber Cadence |
 |---|---|---|---|---|
 | 语言 | **Go** | 多语言 SDK | Java | Go / Java |
 | 部署模型 | **库嵌入** | Server + Worker | Server | Server |
@@ -287,17 +287,17 @@ graphflow/
 | 弹性中间件 | **8 种** | 内置 | 有限 | 有限 |
 | 复杂度 | 低 | 高 | 中 | 高 |
 
-Graphflow 不是 Temporal 的替代品——Temporal 有分布式调度、多语言 SDK、可视化管理台。Graphflow 的定位是**库级图引擎**：不需要独立服务，`go get` 即用，适合嵌入已有 Go 服务做内部编排。
+Weave 不是 Temporal 的替代品——Temporal 有分布式调度、多语言 SDK、可视化管理台。Weave 的定位是**库级图引擎**：不需要独立服务，`go get` 即用，适合嵌入已有 Go 服务做内部编排。
 
 ---
 
 ## 与 Cangjie 的关系
 
-[**Cangjie（仓颉）**](https://github.com/wzhongyou/cangjie) 是基于 Graphflow 构建的终端 AI 编程助手。Graphflow 提供图执行引擎，Cangjie 在其上构建 Agent 循环、工具系统、TUI 界面。
+[**Cangjie（仓颉）**](https://github.com/wzhongyou/cangjie) 是基于 Weave 构建的终端 AI 编程助手。Weave 提供图执行引擎，Cangjie 在其上构建 Agent 循环、工具系统、TUI 界面。
 
 ```
-Graphflow  → 图执行引擎（这个仓库）
-Cangjie    → AI 编程助手（import graphflow）
+Weave  → 图执行引擎（这个仓库）
+Cangjie    → AI 编程助手（import weave）
 ```
 
 ---

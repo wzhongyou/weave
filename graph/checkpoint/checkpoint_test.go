@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph/checkpoint"
+	"github.com/wzhongyou/weave/graph/checkpoint"
 )
 
 func makeCheckpoint(id, graph string) *checkpoint.Checkpoint {
@@ -95,7 +95,7 @@ func TestInMemoryManager(t *testing.T) {
 }
 
 func TestFileManager(t *testing.T) {
-	dir, err := os.MkdirTemp("", "graphflow-cp-*")
+	dir, err := os.MkdirTemp("", "weave-cp-*")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestFileManager(t *testing.T) {
 }
 
 func TestFileManager_EmptyDir(t *testing.T) {
-	dir, err := os.MkdirTemp("", "graphflow-cp-empty-*")
+	dir, err := os.MkdirTemp("", "weave-cp-empty-*")
 	if err != nil {
 		t.Fatal(err)
 	}

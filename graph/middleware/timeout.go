@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // WithTimeout wraps fn with a per-invocation deadline.

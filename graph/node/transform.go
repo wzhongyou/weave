@@ -3,7 +3,7 @@ package node
 import (
 	"context"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // TransformFunc is a pure function that maps one state to another.

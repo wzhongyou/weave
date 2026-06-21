@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // CBState represents the circuit breaker FSM state.

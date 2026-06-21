@@ -1,10 +1,11 @@
-module github.com/wzhongyou/graphflow
+module github.com/wzhongyou/weave
 
 go 1.25.7
 
 require (
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -13,5 +14,4 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

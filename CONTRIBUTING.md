@@ -1,12 +1,12 @@
-# 为 Graphflow 做贡献
+# 为 Weave 做贡献
 
 感谢你愿意来帮忙！
 
 ## 开始
 
 ```bash
-git clone https://github.com/wzhongyou/graphflow.git
-cd graphflow
+git clone https://github.com/wzhongyou/weave.git
+cd weave
 go build ./...
 go vet ./...
 ```

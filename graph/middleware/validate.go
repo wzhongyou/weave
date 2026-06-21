@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // Validator checks a state value; returns a descriptive error if invalid.

@@ -2,9 +2,9 @@
 
 ## 项目概述
 
-Graphflow 是一个 Go 原生的通用图执行引擎，面向后端服务编排、工作流引擎、ETL 管道等场景。`graph/` 是唯一核心包，**与 AI 完全无关**。
+Weave 是一个 Go 原生的通用图执行引擎，面向后端服务编排、工作流引擎、ETL 管道等场景。`graph/` 是唯一核心包，**与 AI 完全无关**。
 
-> AI Agent 开发请使用 [Cangjie（仓颉）](https://github.com/wzhongyou/cangjie)，它基于 Graphflow 图引擎构建。
+> AI Agent 开发请使用 [Cangjie（仓颉）](https://github.com/wzhongyou/cangjie)，它基于 Weave 图引擎构建。
 
 ## 常用命令
 
@@ -52,7 +52,7 @@ Agent 相关代码（`TODO(Ax)` 系列）已迁出至 [Cangjie](https://github.c
 
 ## 设计决策
 
-完整说明见 `docs/graphflow-design.md`。关键几点：
+完整说明见 `docs/weave-design.md`。关键几点：
 
 - **Pregel 风格执行**：超级步循环，非递归调用。
 - **回边 = 循环**：`Compile()` 时通过 DFS 检测；`SetMaxIterations` 防止死循环（默认 1000）。

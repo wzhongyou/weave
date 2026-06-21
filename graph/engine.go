@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph/checkpoint"
+	"github.com/wzhongyou/weave/graph/checkpoint"
 )
 
 // CheckpointManager is the persistence interface used by Engine.Run.

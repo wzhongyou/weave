@@ -22,7 +22,7 @@ type OTelHook[S any] struct {
 // NewOTelHook creates an OTelHook with a named tracer.
 func NewOTelHook[S any]() *OTelHook[S] {
 	return &OTelHook[S]{
-		tracer:     otel.Tracer("graphflow"),
+		tracer:     otel.Tracer("weave"),
 		graphSpans: make(map[string]trace.Span),
 		nodeSpans:  make(map[string]trace.Span),
 	}

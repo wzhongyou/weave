@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // OrderState 订单状态（与 workflow 示例相同）。

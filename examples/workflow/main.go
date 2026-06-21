@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph"
-	"github.com/wzhongyou/graphflow/graph/checkpoint"
+	"github.com/wzhongyou/weave/graph"
+	"github.com/wzhongyou/weave/graph/checkpoint"
 )
 
 // ── 订单状态 ────────────────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ func main() {
 
 	// 场景 3: 带 Checkpoint 的订单
 	fmt.Println("\n═══ 场景 3: 带 Checkpoint ═══")
-	cpManager := checkpoint.NewFileManager("/tmp/graphflow_checkpoints")
+	cpManager := checkpoint.NewFileManager("/tmp/weave_checkpoints")
 
 	result3, err3 := engine.Run(context.Background(), OrderState{
 		OrderID: "ORD-003",

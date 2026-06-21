@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph"
-	"github.com/wzhongyou/graphflow/graph/middleware"
+	"github.com/wzhongyou/weave/graph"
+	"github.com/wzhongyou/weave/graph/middleware"
 )
 
 type S struct{ val int }

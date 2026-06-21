@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/wzhongyou/graphflow/graph"
+	"github.com/wzhongyou/weave/graph"
 )
 
 // DelayConfig configures a Delay node.
